@@ -17,8 +17,6 @@
 package com.formdev.flatlaf.util;
 
 import com.formdev.flatlaf.FlatLaf;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * @since 1.1
@@ -26,15 +24,15 @@ import java.util.logging.Logger;
 class LoggingFacadeImpl
 	implements LoggingFacade
 {
-	private static final Logger LOG = Logger.getLogger( FlatLaf.class.getName() );
+	private static final System.Logger LOG = System.getLogger( FlatLaf.class.getName() );
 
 	@Override
 	public void logSevere( String message, Throwable t ) {
-		LOG.log( Level.SEVERE, message, t );
+		LOG.log( System.Logger.Level.ERROR, message, t );
 	}
 
 	@Override
 	public void logConfig( String message, Throwable t ) {
-		LOG.log( Level.CONFIG, message, t );
+		LOG.log( System.Logger.Level.DEBUG, message, t );
 	}
 }

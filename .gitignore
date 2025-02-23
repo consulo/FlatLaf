@@ -13,3 +13,6 @@ out/
 *.xcworkspacedata
 .vs/
 .vscode/
+
+.consulo/
+target/
