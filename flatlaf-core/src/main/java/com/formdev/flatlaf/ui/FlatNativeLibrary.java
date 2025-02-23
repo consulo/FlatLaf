@@ -16,14 +16,15 @@
 
 package com.formdev.flatlaf.ui;
 
-import java.io.File;
-import java.net.URL;
-import java.security.CodeSource;
 import com.formdev.flatlaf.FlatSystemProperties;
 import com.formdev.flatlaf.util.LoggingFacade;
 import com.formdev.flatlaf.util.NativeLibrary;
 import com.formdev.flatlaf.util.StringUtils;
 import com.formdev.flatlaf.util.SystemInfo;
+
+import java.io.File;
+import java.net.URL;
+import java.security.CodeSource;
 
 /**
  * Helper class to load FlatLaf native library (.dll, .so or .dylib),
@@ -90,10 +91,15 @@ class FlatNativeLibrary
 			classifier = SystemInfo.isAARCH64 ? "macos-arm64" : "macos-x86_64";
 			ext = "dylib";
 
-		} else if( SystemInfo.isLinux && (SystemInfo.isX86_64 || SystemInfo.isAARCH64)) {
+		} else if( SystemInfo.isLinux && (SystemInfo.isX86_64 || SystemInfo.isAARCH64 || SystemInfo.isLOONGARCH64)) {
 			// Linux: requires x86_64 or aarch64
 
-			classifier = SystemInfo.isAARCH64 ? "linux-arm64" : "linux-x86_64";
+			if (SystemInfo.isAARCH64)
+				classifier = "linux-arm64";
+			else if (SystemInfo.isLOONGARCH64)
+				classifier = "linux-loong64";
+			else
+				classifier = "linux-x86_64";
 			ext = "so";
 
 			// Load libjawt.so (part of JRE) explicitly because it is not found
