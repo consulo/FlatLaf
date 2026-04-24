@@ -29,23 +29,31 @@ jobs:
                     - arch: x86_64
                       dpkg_arch: amd64
                       triplet: x86_64-linux-gnu
+                      image: debian:trixie
                     - arch: x86
                       dpkg_arch: i386
                       triplet: i386-linux-gnu
+                      image: debian:trixie
                     - arch: arm64
                       dpkg_arch: arm64
                       triplet: aarch64-linux-gnu
+                      image: debian:trixie
                     - arch: riscv64
                       dpkg_arch: riscv64
                       triplet: riscv64-linux-gnu
+                      image: debian:trixie
+                    # loong64 packages come from debian-ports and are built
+                    # against gcc-15. Using trixie amd64 (gcc-14) creates a
+                    # Multi-Arch: same version conflict on libgcc-s1 etc., so
+                    # this job runs on sid, where amd64 also uses gcc-15.
                     - arch: loongarch64
                       dpkg_arch: loong64
                       triplet: loongarch64-linux-gnu
+                      image: debian:sid
 
-        # Debian trixie carries official ports for all five target archs.
         runs-on: ubuntu-latest
         container:
-            image: debian:trixie
+            image: ${{ matrix.image }}
 
         steps:
             - uses: actions/checkout@v4
@@ -53,9 +61,11 @@ jobs:
             - name: Install base build tools
               run: |
                 apt-get update
+                # openjdk-21-jdk (not -headless) is required for jawt.h,
+                # which the -headless variant strips along with AWT/Swing.
                 apt-get install -y --no-install-recommends \
                     ca-certificates cmake make pkg-config \
-                    openjdk-21-jdk-headless
+                    openjdk-21-jdk
 
             - name: Install compiler for ${{ matrix.arch }}
               run: |
