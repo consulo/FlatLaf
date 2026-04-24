@@ -16,6 +16,17 @@
 # Developer Command Prompt before invoking CMake.
 
 cmake_minimum_required(VERSION 3.16)
+
+# Select the MSVC runtime library (/MD = release CRT, dynamically linked).
+# With cmake_minimum_required >= 3.15 policy CMP0091 is NEW, which means /MD
+# is no longer injected into CMAKE_CXX_FLAGS_RELEASE automatically — the CRT
+# must be selected via MSVC_RUNTIME_LIBRARY (or this cache variable, which
+# all targets inherit). Without it, vcruntime.lib is not linked and C++
+# exception handling symbols (__CxxFrameHandler3/4, __std_terminate) resolve
+# as unresolved externals. Must be set before project().
+# We only ever build Release, so no $<CONFIG:Debug> branch is needed.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 project(flatlaf-natives-windows LANGUAGES CXX)
 
 if(NOT DEFINED FLATLAF_ARCH)
