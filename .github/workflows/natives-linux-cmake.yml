@@ -1,0 +1,108 @@
+# Build Linux natives for all supported architectures using the single
+# CMakeLists.txt under flatlaf-natives/flatlaf-natives-linux/.
+#
+# The canonical Gradle build in natives.yml still runs for x86_64/arm64 on
+# native GitHub runners; this workflow is independent and also produces x86,
+# riscv64 and loongarch64 which Gradle's cpp-library plugin cannot build.
+
+name: Native Libraries (Linux, CMake)
+
+on:
+    push:
+        branches:
+            - '*'
+        tags:
+            - '[0-9]*'
+        paths:
+            - 'flatlaf-natives/flatlaf-natives-linux/**'
+            - '.github/workflows/natives-linux-cmake.yml'
+            - '!**.md'
+            - '!**/.settings/**'
+    workflow_dispatch:
+
+jobs:
+    Natives-Linux:
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - arch: x86_64
+                      dpkg_arch: amd64
+                      triplet: x86_64-linux-gnu
+                    - arch: x86
+                      dpkg_arch: i386
+                      triplet: i386-linux-gnu
+                    - arch: arm64
+                      dpkg_arch: arm64
+                      triplet: aarch64-linux-gnu
+                    - arch: riscv64
+                      dpkg_arch: riscv64
+                      triplet: riscv64-linux-gnu
+                    - arch: loongarch64
+                      dpkg_arch: loong64
+                      triplet: loongarch64-linux-gnu
+
+        # Debian trixie carries official ports for all five target archs.
+        runs-on: ubuntu-latest
+        container:
+            image: debian:trixie
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install base build tools
+              run: |
+                apt-get update
+                apt-get install -y --no-install-recommends \
+                    ca-certificates cmake pkg-config \
+                    openjdk-21-jdk-headless
+
+            - name: Install compiler for ${{ matrix.arch }}
+              run: |
+                case "${{ matrix.arch }}" in
+                    x86_64) apt-get install -y --no-install-recommends g++ ;;
+                    x86)    apt-get install -y --no-install-recommends g++-multilib ;;
+                    arm64)  apt-get install -y --no-install-recommends g++-aarch64-linux-gnu ;;
+                    riscv64) apt-get install -y --no-install-recommends g++-riscv64-linux-gnu ;;
+                    loongarch64) apt-get install -y --no-install-recommends g++-loongarch64-linux-gnu ;;
+                esac
+
+            - name: Enable ${{ matrix.dpkg_arch }} foreign architecture (if needed)
+              run: |
+                if [ "${{ matrix.dpkg_arch }}" != "amd64" ]; then
+                    dpkg --add-architecture ${{ matrix.dpkg_arch }}
+                    apt-get update
+                fi
+
+            - name: Install target-arch GTK and JRE
+              run: |
+                apt-get install -y --no-install-recommends \
+                    libgtk-3-dev:${{ matrix.dpkg_arch }} \
+                    openjdk-21-jre:${{ matrix.dpkg_arch }}
+
+            - name: Resolve JAVA_HOME and target JAWT_LIB_DIR
+              run: |
+                echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
+                echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-${{ matrix.dpkg_arch }}/lib" >> $GITHUB_ENV
+
+            - name: Configure CMake
+              working-directory: flatlaf-natives/flatlaf-natives-linux
+              run: |
+                cmake -S . -B build/${{ matrix.arch }} \
+                    -DCMAKE_BUILD_TYPE=Release \
+                    -DFLATLAF_ARCH=${{ matrix.arch }} \
+                    -DJAVA_HOME=$JAVA_HOME \
+                    -DJAWT_LIB_DIR=$JAWT_LIB_DIR \
+                    -DOUTPUT_DIR=$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives
+
+            - name: Build
+              working-directory: flatlaf-natives/flatlaf-natives-linux
+              run: cmake --build build/${{ matrix.arch }} --parallel
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: FlatLaf-natives-linux-${{ matrix.arch }}
+                  path: |
+                      flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-linux-${{ matrix.arch }}.so
+                      flatlaf-natives/flatlaf-natives-linux/build/${{ matrix.arch }}
