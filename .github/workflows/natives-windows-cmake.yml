@@ -1,0 +1,100 @@
+# Build Windows natives for x86, x86_64 and arm64 using the standalone
+# CMakeLists.txt under flatlaf-natives/flatlaf-natives-windows/. Each matrix
+# entry produces a single-arch DLL; no fat/universal binaries are created.
+
+name: Native Libraries (Windows, CMake)
+
+on:
+    push:
+        branches:
+            - '*'
+        tags:
+            - '[0-9]*'
+        paths:
+            - 'flatlaf-natives/flatlaf-natives-windows/**'
+            - '.github/workflows/natives-windows-cmake.yml'
+            - '!**.md'
+            - '!**/.settings/**'
+    workflow_dispatch:
+
+jobs:
+    Natives-Windows:
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - arch: x86
+                      msvc_arch: x86
+                      cmake_platform: Win32
+                    - arch: x86_64
+                      msvc_arch: x64
+                      cmake_platform: x64
+                    - arch: arm64
+                      msvc_arch: amd64_arm64
+                      cmake_platform: ARM64
+
+        runs-on: windows-latest
+
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Setup Java 21
+              uses: actions/setup-java@v5
+              with:
+                  java-version: 21
+                  distribution: temurin
+
+            # Activates the matching MSVC environment (cl.exe, link.exe, headers
+            # and libs) for the target arch. The Visual Studio CMake generator
+            # could also cross-target, but this keeps cmake invocation arch-agnostic.
+            - name: Setup MSVC (${{ matrix.msvc_arch }})
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: ${{ matrix.msvc_arch }}
+
+            - name: Configure CMake
+              working-directory: flatlaf-natives/flatlaf-natives-windows
+              shell: cmd
+              run: >
+                  cmake -S . -B build/${{ matrix.arch }}
+                  -G "Visual Studio 17 2022"
+                  -A ${{ matrix.cmake_platform }}
+                  -DCMAKE_BUILD_TYPE=Release
+                  -DFLATLAF_ARCH=${{ matrix.arch }}
+                  -DJAVA_HOME="%JAVA_HOME%"
+                  -DOUTPUT_DIR="%GITHUB_WORKSPACE%/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives"
+
+            - name: Build
+              working-directory: flatlaf-natives/flatlaf-natives-windows
+              run: cmake --build build/${{ matrix.arch }} --config Release --parallel
+
+            # Catches silent toolchain misconfiguration where the DLL ends up
+            # targeting the wrong machine (e.g. x86_64 when we asked for arm64).
+            - name: Verify PE machine
+              shell: bash
+              run: |
+                  DLL="$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/flatlaf-windows-${{ matrix.arch }}.dll"
+                  case "${{ matrix.arch }}" in
+                      x86)    EXPECT="x86" ;;
+                      x86_64) EXPECT="x64" ;;
+                      arm64)  EXPECT="ARM64" ;;
+                  esac
+
+                  echo "File: $DLL"
+                  dumpbin //HEADERS "$DLL" | grep -E "machine \(.*\)" | head -1
+                  echo
+                  # dumpbin /headers prints "machine (...)" with human names.
+                  MACHINE=$(dumpbin //HEADERS "$DLL" | grep -E "machine \(.*\)" | head -1 | sed -E 's/.*machine \(([^)]*)\).*/\1/')
+                  if [ "$MACHINE" != "$EXPECT" ]; then
+                      echo "::error::PE machine mismatch. Expected '$EXPECT' for ${{ matrix.arch }}, got '$MACHINE'."
+                      exit 1
+                  fi
+                  echo "OK: PE machine is '$MACHINE' as expected."
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v5
+              with:
+                  name: FlatLaf-natives-windows-${{ matrix.arch }}
+                  path: |
+                      flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/flatlaf-windows-${{ matrix.arch }}.dll
+                      flatlaf-natives/flatlaf-natives-windows/build/${{ matrix.arch }}

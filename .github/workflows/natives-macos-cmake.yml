@@ -1,0 +1,83 @@
+# Build macOS natives for arm64 and x86_64 using the standalone CMakeLists.txt
+# under flatlaf-natives/flatlaf-natives-macos/. Each matrix entry produces a
+# single-arch .dylib — no universal (fat) binaries.
+#
+# macos-latest is arm64; the x86_64 build cross-compiles via clang's -arch flag
+# (CMAKE_OSX_ARCHITECTURES=x86_64). No separate intel runner is required.
+
+name: Native Libraries (macOS, CMake)
+
+on:
+    push:
+        branches:
+            - '*'
+        tags:
+            - '[0-9]*'
+        paths:
+            - 'flatlaf-natives/flatlaf-natives-macos/**'
+            - '.github/workflows/natives-macos-cmake.yml'
+            - '!**.md'
+            - '!**/.settings/**'
+    workflow_dispatch:
+
+jobs:
+    Natives-macOS:
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - arch: arm64
+                    - arch: x86_64
+
+        runs-on: macos-latest
+
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Setup Java 21
+              uses: actions/setup-java@v5
+              with:
+                  java-version: 21
+                  distribution: temurin
+
+            - name: Configure CMake
+              working-directory: flatlaf-natives/flatlaf-natives-macos
+              run: |
+                cmake -S . -B build/${{ matrix.arch }} \
+                    -DCMAKE_BUILD_TYPE=Release \
+                    -DFLATLAF_ARCH=${{ matrix.arch }} \
+                    -DJAVA_HOME="$JAVA_HOME" \
+                    -DOUTPUT_DIR="$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives"
+
+            - name: Build
+              working-directory: flatlaf-natives/flatlaf-natives-macos
+              run: cmake --build build/${{ matrix.arch }} --parallel
+
+            # Confirms the Mach-O CPU type matches the requested arch. A
+            # universal/fat binary would report multiple archs in lipo output
+            # and also fail this check, which is intentional.
+            - name: Verify Mach-O architecture
+              run: |
+                DYLIB="$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-macos-${{ matrix.arch }}.dylib"
+                case "${{ matrix.arch }}" in
+                    arm64)  EXPECT="arm64" ;;
+                    x86_64) EXPECT="x86_64" ;;
+                esac
+
+                echo "File: $DYLIB"
+                lipo -archs "$DYLIB"
+                echo
+                ARCHS=$(lipo -archs "$DYLIB")
+                if [ "$ARCHS" != "$EXPECT" ]; then
+                    echo "::error::Mach-O arch mismatch. Expected '$EXPECT' for ${{ matrix.arch }}, got '$ARCHS'."
+                    exit 1
+                fi
+                echo "OK: Mach-O arch is '$ARCHS' as expected."
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v5
+              with:
+                  name: FlatLaf-natives-macos-${{ matrix.arch }}
+                  path: |
+                      flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-macos-${{ matrix.arch }}.dylib
+                      flatlaf-natives/flatlaf-natives-macos/build/${{ matrix.arch }}
