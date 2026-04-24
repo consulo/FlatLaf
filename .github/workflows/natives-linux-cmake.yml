@@ -213,36 +213,25 @@ jobs:
             - name: Arrange binaries by os-arch
               run: |
                 set -euo pipefail
+                mkdir -p out
                 for dir in artifacts/*/; do
                     name=$(basename "$dir")
                     arch="${name#FlatLaf-natives-linux-}"
-                    target="out/linux-$arch"
-                    mkdir -p "$target"
-                    find "$dir" -name 'libflatlaf-linux-*.so' -exec cp {} "$target/" \;
+                    mkdir -p "out/linux-$arch"
+                    cp "$dir"flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-linux-$arch.so "out/linux-$arch/"
                 done
                 find out -type f
-
-            - name: Verify token is available
-              env:
-                  CONSULO_BOT_TOKEN: ${{ secrets.CONSULO_BOT_TOKEN }}
-              run: |
-                if [ -z "${CONSULO_BOT_TOKEN:-}" ]; then
-                    echo "ERROR: CONSULO_BOT_TOKEN secret is not set for this job" >&2
-                    exit 1
-                fi
-                echo "Token length: ${#CONSULO_BOT_TOKEN}"
 
             - name: Commit and push to consulo/binaries
               env:
                   CONSULO_BOT_TOKEN: ${{ secrets.CONSULO_BOT_TOKEN }}
               run: |
                 set -euo pipefail
-                git clone https://github.com/consulo/binaries.git binaries-repo
+                git clone "https://consulo-bot:${CONSULO_BOT_TOKEN}@github.com/consulo/binaries.git" binaries-repo
                 cd binaries-repo
                 git checkout master 2>/dev/null || git checkout --orphan master
                 git config user.name "consulo Bot"
                 git config user.email "consulo.bot@gmail.com"
-                git config http.https://github.com/.extraheader "AUTHORIZATION: Bearer ${CONSULO_BOT_TOKEN}"
                 cp -r ../out/. .
                 git add -A
                 if git diff --cached --quiet; then
