@@ -71,15 +71,7 @@ target_include_directories(${LIB_BASENAME} PRIVATE
 target_compile_definitions(${LIB_BASENAME} PRIVATE UNICODE _UNICODE)
 
 if(MSVC)
-    # /MD selects the shared release CRT (msvcrt.dll + vcruntime.dll + ucrt).
-    # Without an explicit /M flag, cl.exe does not embed the
-    # #pragma comment(linker, "/DEFAULTLIB:VCRUNTIME") directives into .obj
-    # files, and link.exe then fails to resolve __CxxFrameHandler3/4 and
-    # __std_terminate. Neither CMAKE_MSVC_RUNTIME_LIBRARY nor policy CMP0091
-    # got this flag through to cl.exe reliably in the Visual Studio generator
-    # path, so we set it explicitly on the target. /EHsc is CMake's MSVC
-    # default but included here for clarity.
-    target_compile_options(${LIB_BASENAME} PRIVATE /MD /EHsc /O2 /GS-)
+    target_compile_options(${LIB_BASENAME} PRIVATE /EHsc /O2 /GS-)
 else()
     target_compile_options(${LIB_BASENAME} PRIVATE -O2)
 endif()
@@ -87,6 +79,21 @@ endif()
 target_link_libraries(${LIB_BASENAME} PRIVATE
     User32 Gdi32 shell32 AdvAPI32 Kernel32 Dwmapi Ole32 uuid
 )
+
+# Force the shared release CRT import libs into the link line. This is what
+# cl.exe would normally embed as /DEFAULTLIB:VCRUNTIME directives in the .obj
+# files when /MD is in effect — but CMake's policy machinery strips /MD from
+# both target_compile_options and CMAKE_CXX_FLAGS_RELEASE under CMP0091 NEW,
+# leaving the .obj files without any CRT directive. Specifying these libs at
+# link time is generator-agnostic (works under Ninja and Visual Studio) and
+# survives whatever CMake does with /M flags.
+if(MSVC)
+    target_link_options(${LIB_BASENAME} PRIVATE
+        /DEFAULTLIB:msvcrt.lib
+        /DEFAULTLIB:vcruntime.lib
+        /DEFAULTLIB:ucrt.lib
+    )
+endif()
 
 add_custom_command(TARGET ${LIB_BASENAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${OUTPUT_DIR}"
