@@ -26,17 +26,14 @@ jobs:
                     - arch: x86
                       runner: windows-latest
                       msvc_arch: x86
-                      cmake_platform: Win32
                     - arch: x86_64
                       runner: windows-latest
                       msvc_arch: x64
-                      cmake_platform: x64
                     # Native arm64 runner — no cross-compile, simpler CRT
                     # resolution and matches the target exactly.
                     - arch: arm64
                       runner: windows-11-arm
                       msvc_arch: arm64
-                      cmake_platform: ARM64
 
         runs-on: ${{ matrix.runner }}
 
@@ -49,9 +46,12 @@ jobs:
                   java-version: 21
                   distribution: temurin
 
-            # Activates the matching MSVC environment so dumpbin (used in the
-            # verify step) is on PATH. The VS generator itself finds MSVC via
-            # the registry and does not require this env to be active.
+            # Ninja + MSVC is more reliable than the Visual Studio CMake
+            # generator, which kept producing .vcxproj files that failed to
+            # link the C runtime (unresolved __CxxFrameHandler3/4,
+            # __std_terminate) regardless of MSVC_RUNTIME_LIBRARY / CMP0091.
+            # Ninja calls cl.exe + link.exe directly with the flags CMake
+            # computes, so /MD actually reaches the compiler.
             - name: Setup MSVC (${{ matrix.msvc_arch }})
               uses: ilammy/msvc-dev-cmd@v1
               with:
@@ -62,15 +62,16 @@ jobs:
               shell: cmd
               run: >
                   cmake -S . -B build/${{ matrix.arch }}
-                  -G "Visual Studio 17 2022"
-                  -A ${{ matrix.cmake_platform }}
+                  -G Ninja
+                  -DCMAKE_BUILD_TYPE=Release
                   -DFLATLAF_ARCH=${{ matrix.arch }}
                   -DJAVA_HOME="%JAVA_HOME%"
                   -DOUTPUT_DIR="%GITHUB_WORKSPACE%/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives"
 
             - name: Build
               working-directory: flatlaf-natives/flatlaf-natives-windows
-              run: cmake --build build/${{ matrix.arch }} --config Release --parallel
+              shell: cmd
+              run: cmake --build build/${{ matrix.arch }} --parallel
 
             # Catches silent toolchain misconfiguration where the DLL ends up
             # targeting the wrong machine (e.g. x86_64 when we asked for arm64).
