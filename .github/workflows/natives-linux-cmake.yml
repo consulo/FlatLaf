@@ -54,7 +54,7 @@ jobs:
               run: |
                 apt-get update
                 apt-get install -y --no-install-recommends \
-                    ca-certificates cmake pkg-config \
+                    ca-certificates cmake make pkg-config \
                     openjdk-21-jdk-headless
 
             - name: Install compiler for ${{ matrix.arch }}
@@ -69,10 +69,35 @@ jobs:
 
             - name: Enable ${{ matrix.dpkg_arch }} foreign architecture (if needed)
               run: |
-                if [ "${{ matrix.dpkg_arch }}" != "amd64" ]; then
-                    dpkg --add-architecture ${{ matrix.dpkg_arch }}
-                    apt-get update
+                if [ "${{ matrix.dpkg_arch }}" = "amd64" ]; then
+                    exit 0
                 fi
+
+                # loong64 is not yet a Debian release architecture; packages
+                # live in debian-ports. Restrict the default (release) sources
+                # to the host arch so apt does not 404 looking for loong64
+                # Packages files there, then add debian-ports as an extra
+                # source limited to loong64.
+                if [ "${{ matrix.dpkg_arch }}" = "loong64" ]; then
+                    for f in /etc/apt/sources.list.d/debian.sources; do
+                        if [ -f "$f" ] && ! grep -q '^Architectures:' "$f"; then
+                            sed -i '/^Suites:/a Architectures: amd64' "$f"
+                        fi
+                    done
+                    apt-get update
+                    apt-get install -y --no-install-recommends debian-ports-archive-keyring
+                    cat > /etc/apt/sources.list.d/debian-ports.sources <<'EOF'
+                Types: deb
+                URIs: http://deb.debian.org/debian-ports
+                Suites: sid
+                Components: main
+                Architectures: loong64
+                Signed-By: /usr/share/keyrings/debian-ports-archive-keyring.gpg
+                EOF
+                fi
+
+                dpkg --add-architecture ${{ matrix.dpkg_arch }}
+                apt-get update
 
             - name: Install target-arch GTK and JRE
               run: |
