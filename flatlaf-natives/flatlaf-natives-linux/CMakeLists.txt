@@ -88,13 +88,23 @@ else()
     set(CMAKE_CXX_COMPILER g++)
 endif()
 
-# pkg-config: front-load the target arch's multiarch .pc files so GTK headers
-# and libs resolve for the target, then fall back to the non-multiarch layout
-# used by distros like Arch Linux. When cross-compiling on Debian, the
-# multiarch entry is what matters; on native x86_64 Arch it's the fallback.
-set(ENV{PKG_CONFIG_LIBDIR}
-    "/usr/lib/${FLATLAF_TRIPLET}/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig")
-set(ENV{PKG_CONFIG_SYSROOT_DIR} "")
+# Optional isolated sysroot. Used when installing target-arch packages via
+# dpkg multiarch would clash with the host's package versions (e.g. loong64
+# against a sid amd64 container). Files live under FLATLAF_SYSROOT instead
+# of on the host filesystem.
+if(DEFINED FLATLAF_SYSROOT)
+    set(CMAKE_SYSROOT "${FLATLAF_SYSROOT}")
+    set(ENV{PKG_CONFIG_SYSROOT_DIR} "${FLATLAF_SYSROOT}")
+    set(ENV{PKG_CONFIG_LIBDIR}
+        "${FLATLAF_SYSROOT}/usr/lib/${FLATLAF_TRIPLET}/pkgconfig:${FLATLAF_SYSROOT}/usr/share/pkgconfig")
+else()
+    # pkg-config: front-load the target arch's multiarch .pc files so GTK
+    # headers and libs resolve for the target, then fall back to the
+    # non-multiarch layout used by distros like Arch Linux.
+    set(ENV{PKG_CONFIG_LIBDIR}
+        "/usr/lib/${FLATLAF_TRIPLET}/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig")
+    set(ENV{PKG_CONFIG_SYSROOT_DIR} "")
+endif()
 
 project(flatlaf-natives-linux LANGUAGES CXX)
 

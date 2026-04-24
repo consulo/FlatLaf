@@ -42,84 +42,21 @@ jobs:
                       dpkg_arch: riscv64
                       triplet: riscv64-linux-gnu
                       image: debian:trixie
-                    # loong64 packages come from debian-ports and are built
-                    # against gcc-15. Using trixie amd64 (gcc-14) creates a
-                    # Multi-Arch: same version conflict on libgcc-s1 etc., so
-                    # this job runs on sid, where amd64 also uses gcc-15.
+                    # loong64 is built via an isolated sysroot (mmdebstrap
+                    # --variant=extract from debian-ports), so the host can
+                    # stay on trixie like the other archs — no multiarch
+                    # version alignment needed.
                     - arch: loongarch64
                       dpkg_arch: loong64
                       triplet: loongarch64-linux-gnu
-                      image: debian:sid
+                      image: debian:trixie
 
         runs-on: ubuntu-latest
         container:
             image: ${{ matrix.image }}
 
         steps:
-            - uses: actions/checkout@v4
-
-            # Run BEFORE any apt-get install so later steps pull matching
-            # versions. Only loong64 needs special handling today: sid's
-            # amd64 has moved to gcc-16 while debian-ports' loong64 is still
-            # on gcc-15, producing a Multi-Arch: same version conflict on
-            # libgcc-s1. Pin both archives to a snapshot from before the
-            # gcc-16 transition (2026-04-23) so versions match.
-            - name: Setup apt sources
-              run: |
-                if [ "${{ matrix.dpkg_arch }}" != "loong64" ]; then
-                    exit 0
-                fi
-
-                # The gcc-16 transition hit sid in March 2026 (gcc-16-base
-                # around 2026-03-08, libgcc-s1 on 2026-03-22). Pick a snapshot
-                # well before that so sid amd64 is still on gcc-15, matching
-                # debian-ports' loong64 libgcc-s1=15.2.0-12. If this date ever
-                # stops working (e.g. the snapshot expires or the debian-ports
-                # baseline moves forward), bump the SNAPSHOT to a date where
-                # sid amd64 libgcc-s1 version matches the loong64 one.
-                SNAPSHOT=20260115T000000Z
-                echo 'Acquire::Check-Valid-Until "false";' \
-                    > /etc/apt/apt.conf.d/99no-check-valid
-
-                rm -f /etc/apt/sources.list
-                rm -f /etc/apt/sources.list.d/*.sources
-                rm -f /etc/apt/sources.list.d/*.list
-
-                cat > /etc/apt/sources.list.d/sid.sources <<EOF
-                Types: deb
-                URIs: http://snapshot.debian.org/archive/debian/${SNAPSHOT}/
-                Suites: sid
-                Components: main
-                Architectures: amd64
-                Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-                EOF
-
-                # The base debian:sid image ships with current (gcc-16)
-                # packages pre-installed. Without this, apt picks the
-                # already-installed newer version instead of the snapshot's
-                # gcc-15 packages, defeating the whole pinning exercise.
-                # Priority > 1000 allows downgrades.
-                cat > /etc/apt/preferences.d/99pin-snapshot <<EOF
-                Package: *
-                Pin: origin snapshot.debian.org
-                Pin-Priority: 1001
-                EOF
-
-                apt-get update
-                # Downgrade pre-installed amd64 packages to match the snapshot,
-                # so libgcc-s1 / libc6 versions line up with the loong64 ones.
-                apt-get -y --allow-downgrades full-upgrade
-
-                apt-get install -y --no-install-recommends debian-ports-archive-keyring
-
-                cat > /etc/apt/sources.list.d/debian-ports.sources <<EOF
-                Types: deb
-                URIs: http://snapshot.debian.org/archive/debian-ports/${SNAPSHOT}/
-                Suites: sid
-                Components: main
-                Architectures: loong64
-                Signed-By: /usr/share/keyrings/debian-ports-archive-keyring.gpg
-                EOF
+            - uses: actions/checkout@v5
 
             - name: Install base build tools
               run: |
@@ -140,56 +77,64 @@ jobs:
                     loongarch64) apt-get install -y --no-install-recommends g++-loongarch64-linux-gnu ;;
                 esac
 
+            # For every arch except loong64 we use dpkg multiarch on the host.
+            # loong64 is handled separately via a sysroot because debian-ports'
+            # loong64 package versions lag sid's amd64 by micro-versions that
+            # dpkg's Multi-Arch: same constraint refuses to bridge.
             - name: Enable ${{ matrix.dpkg_arch }} foreign architecture (if needed)
+              if: matrix.dpkg_arch != 'amd64' && matrix.dpkg_arch != 'loong64'
               run: |
-                if [ "${{ matrix.dpkg_arch }}" = "amd64" ]; then
-                    exit 0
-                fi
                 dpkg --add-architecture ${{ matrix.dpkg_arch }}
                 apt-get update
 
-            - name: Install target-arch GTK
+            - name: Install target-arch GTK (multiarch)
+              if: matrix.dpkg_arch != 'amd64' && matrix.dpkg_arch != 'loong64'
               run: |
                 apt-get install -y --no-install-recommends \
                     libgtk-3-dev:${{ matrix.dpkg_arch }}
 
-            # For most arches the foreign-arch openjdk-21-jre installs cleanly
-            # alongside the amd64 JDK. For loong64 that fails because
-            # debian-ports lags the sid openjdk version (21.0.9 vs 21.0.11~9ea)
-            # and the two packages Break each other. Workaround: download the
-            # .deb without installing it (no dep resolution) and extract only
-            # the lib/ directory that contains libjawt.so.
-            - name: Obtain target-arch libjawt.so
+            - name: Obtain target-arch libjawt.so (multiarch)
+              if: matrix.dpkg_arch != 'amd64' && matrix.dpkg_arch != 'loong64'
               run: |
-                if [ "${{ matrix.dpkg_arch }}" = "amd64" ]; then
-                    # host JDK already installed; libjawt.so ships with it
-                    echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-amd64/lib" >> $GITHUB_ENV
-                    exit 0
-                fi
+                apt-get install -y --no-install-recommends \
+                    openjdk-21-jre:${{ matrix.dpkg_arch }}
+                echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-${{ matrix.dpkg_arch }}/lib" >> $GITHUB_ENV
 
-                if [ "${{ matrix.dpkg_arch }}" = "loong64" ]; then
-                    mkdir -p /tmp/jre-extract
-                    cd /tmp/jre-extract
-                    apt-get download openjdk-21-jre:${{ matrix.dpkg_arch }}
-                    dpkg-deb -x openjdk-21-jre_*.deb .
-                    TARGET_JRE_LIB=$(find . -type d -path '*/jvm/*/lib' -print -quit)
-                    if [ -z "$TARGET_JRE_LIB" ]; then
-                        echo "::error::Could not locate extracted JRE lib/ directory"
-                        find . -name libjawt.so -print
-                        exit 1
-                    fi
-                    ABS_LIB=$(readlink -f "$TARGET_JRE_LIB")
-                    if [ ! -f "$ABS_LIB/libjawt.so" ]; then
-                        echo "::error::libjawt.so not found in extracted JRE ($ABS_LIB)"
-                        exit 1
-                    fi
-                    echo "JAWT_LIB_DIR=$ABS_LIB" >> $GITHUB_ENV
-                else
-                    # regular foreign arches: install normally
-                    apt-get install -y --no-install-recommends \
-                        openjdk-21-jre:${{ matrix.dpkg_arch }}
-                    echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-${{ matrix.dpkg_arch }}/lib" >> $GITHUB_ENV
+            - name: Use host JDK libjawt.so (amd64)
+              if: matrix.dpkg_arch == 'amd64'
+              run: |
+                echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-amd64/lib" >> $GITHUB_ENV
+
+            # Build an isolated loong64 sysroot with mmdebstrap --variant=extract:
+            # .deb files are unpacked into /opt/loong64-sysroot with no scripts
+            # run and no interaction with the host dpkg database. This avoids
+            # every multiarch: same version conflict (libgcc-s1, libc6, openjdk)
+            # because the loong64 files never touch the host filesystem.
+            - name: Build loong64 sysroot (mmdebstrap)
+              if: matrix.dpkg_arch == 'loong64'
+              run: |
+                apt-get install -y --no-install-recommends \
+                    mmdebstrap debian-ports-archive-keyring
+
+                SNAPSHOT=20260115T000000Z
+                SYSROOT=/opt/loong64-sysroot
+
+                mmdebstrap \
+                    --architectures=loong64 \
+                    --variant=extract \
+                    --include=libgtk-3-dev,openjdk-21-jre \
+                    --keyring=/usr/share/keyrings/debian-ports-archive-keyring.gpg \
+                    --aptopt='Acquire::Check-Valid-Until "false"' \
+                    sid "$SYSROOT" \
+                    "deb http://snapshot.debian.org/archive/debian-ports/${SNAPSHOT}/ sid main"
+
+                JAWT=$(find "$SYSROOT" -name libjawt.so -print -quit)
+                if [ -z "$JAWT" ]; then
+                    echo "::error::libjawt.so not found in sysroot"
+                    exit 1
                 fi
+                echo "FLATLAF_SYSROOT=$SYSROOT" >> $GITHUB_ENV
+                echo "JAWT_LIB_DIR=$(dirname "$JAWT")" >> $GITHUB_ENV
 
             - name: Resolve JAVA_HOME
               run: |
@@ -198,12 +143,17 @@ jobs:
             - name: Configure CMake
               working-directory: flatlaf-natives/flatlaf-natives-linux
               run: |
+                EXTRA_ARGS=""
+                if [ -n "${FLATLAF_SYSROOT:-}" ]; then
+                    EXTRA_ARGS="-DFLATLAF_SYSROOT=$FLATLAF_SYSROOT"
+                fi
                 cmake -S . -B build/${{ matrix.arch }} \
                     -DCMAKE_BUILD_TYPE=Release \
                     -DFLATLAF_ARCH=${{ matrix.arch }} \
                     -DJAVA_HOME=$JAVA_HOME \
                     -DJAWT_LIB_DIR=$JAWT_LIB_DIR \
-                    -DOUTPUT_DIR=$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives
+                    -DOUTPUT_DIR=$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives \
+                    $EXTRA_ARGS
 
             - name: Build
               working-directory: flatlaf-natives/flatlaf-natives-linux
@@ -233,7 +183,7 @@ jobs:
                 echo "OK: ELF machine is '$MACHINE' as expected."
 
             - name: Upload artifacts
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v5
               with:
                   name: FlatLaf-natives-linux-${{ matrix.arch }}
                   path: |
