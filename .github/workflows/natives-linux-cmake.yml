@@ -196,3 +196,58 @@ jobs:
                   path: |
                       flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-linux-${{ matrix.arch }}.so
                       flatlaf-natives/flatlaf-natives-linux/build/${{ matrix.arch }}
+
+    Publish:
+        needs: Natives-Linux
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        concurrency:
+            group: binaries-publish
+            cancel-in-progress: false
+        steps:
+            - name: Download all artifacts
+              uses: actions/download-artifact@v5
+              with:
+                  path: artifacts
+
+            - name: Arrange binaries by os-arch
+              run: |
+                set -euo pipefail
+                for dir in artifacts/*/; do
+                    name=$(basename "$dir")
+                    arch="${name#FlatLaf-natives-linux-}"
+                    target="out/linux-$arch"
+                    mkdir -p "$target"
+                    find "$dir" -name 'libflatlaf-linux-*.so' -exec cp {} "$target/" \;
+                done
+                find out -type f
+
+            - name: Verify token is available
+              env:
+                  CONSULO_BOT_TOKEN: ${{ secrets.CONSULO_BOT_TOKEN }}
+              run: |
+                if [ -z "${CONSULO_BOT_TOKEN:-}" ]; then
+                    echo "ERROR: CONSULO_BOT_TOKEN secret is not set for this job" >&2
+                    exit 1
+                fi
+                echo "Token length: ${#CONSULO_BOT_TOKEN}"
+
+            - name: Commit and push to consulo/binaries
+              env:
+                  CONSULO_BOT_TOKEN: ${{ secrets.CONSULO_BOT_TOKEN }}
+              run: |
+                set -euo pipefail
+                git clone https://github.com/consulo/binaries.git binaries-repo
+                cd binaries-repo
+                git checkout master 2>/dev/null || git checkout --orphan master
+                git config user.name "consulo Bot"
+                git config user.email "consulo.bot@gmail.com"
+                git config http.https://github.com/.extraheader "AUTHORIZATION: Bearer ${CONSULO_BOT_TOKEN}"
+                cp -r ../out/. .
+                git add -A
+                if git diff --cached --quiet; then
+                    echo "No changes to commit"
+                else
+                    git commit -m "Update flatlaf linux natives from ${GITHUB_REPOSITORY}@${GITHUB_SHA::7}"
+                    git push -u origin master
+                fi
