@@ -70,7 +70,10 @@ jobs:
                     exit 0
                 fi
 
-                SNAPSHOT=20260415T000000Z
+                # gcc-16 landed in sid on 2026-03-22 (version 16-20260322-1);
+                # pick a snapshot from before that date so sid amd64 is still
+                # on gcc-15, matching debian-ports' loong64 libgcc-s1=15.2.0-12.
+                SNAPSHOT=20260315T000000Z
                 echo 'Acquire::Check-Valid-Until "false";' \
                     > /etc/apt/apt.conf.d/99no-check-valid
 
@@ -126,16 +129,52 @@ jobs:
                 dpkg --add-architecture ${{ matrix.dpkg_arch }}
                 apt-get update
 
-            - name: Install target-arch GTK and JRE
+            - name: Install target-arch GTK
               run: |
                 apt-get install -y --no-install-recommends \
-                    libgtk-3-dev:${{ matrix.dpkg_arch }} \
-                    openjdk-21-jre:${{ matrix.dpkg_arch }}
+                    libgtk-3-dev:${{ matrix.dpkg_arch }}
 
-            - name: Resolve JAVA_HOME and target JAWT_LIB_DIR
+            # For most arches the foreign-arch openjdk-21-jre installs cleanly
+            # alongside the amd64 JDK. For loong64 that fails because
+            # debian-ports lags the sid openjdk version (21.0.9 vs 21.0.11~9ea)
+            # and the two packages Break each other. Workaround: download the
+            # .deb without installing it (no dep resolution) and extract only
+            # the lib/ directory that contains libjawt.so.
+            - name: Obtain target-arch libjawt.so
+              run: |
+                if [ "${{ matrix.dpkg_arch }}" = "amd64" ]; then
+                    # host JDK already installed; libjawt.so ships with it
+                    echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-amd64/lib" >> $GITHUB_ENV
+                    exit 0
+                fi
+
+                if [ "${{ matrix.dpkg_arch }}" = "loong64" ]; then
+                    mkdir -p /tmp/jre-extract
+                    cd /tmp/jre-extract
+                    apt-get download openjdk-21-jre:${{ matrix.dpkg_arch }}
+                    dpkg-deb -x openjdk-21-jre_*.deb .
+                    TARGET_JRE_LIB=$(find . -type d -path '*/jvm/*/lib' -print -quit)
+                    if [ -z "$TARGET_JRE_LIB" ]; then
+                        echo "::error::Could not locate extracted JRE lib/ directory"
+                        find . -name libjawt.so -print
+                        exit 1
+                    fi
+                    ABS_LIB=$(readlink -f "$TARGET_JRE_LIB")
+                    if [ ! -f "$ABS_LIB/libjawt.so" ]; then
+                        echo "::error::libjawt.so not found in extracted JRE ($ABS_LIB)"
+                        exit 1
+                    fi
+                    echo "JAWT_LIB_DIR=$ABS_LIB" >> $GITHUB_ENV
+                else
+                    # regular foreign arches: install normally
+                    apt-get install -y --no-install-recommends \
+                        openjdk-21-jre:${{ matrix.dpkg_arch }}
+                    echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-${{ matrix.dpkg_arch }}/lib" >> $GITHUB_ENV
+                fi
+
+            - name: Resolve JAVA_HOME
               run: |
                 echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
-                echo "JAWT_LIB_DIR=/usr/lib/jvm/java-21-openjdk-${{ matrix.dpkg_arch }}/lib" >> $GITHUB_ENV
 
             - name: Configure CMake
               working-directory: flatlaf-natives/flatlaf-natives-linux
@@ -150,6 +189,31 @@ jobs:
             - name: Build
               working-directory: flatlaf-natives/flatlaf-natives-linux
               run: cmake --build build/${{ matrix.arch }} --parallel
+
+            # Catches silent toolchain misconfiguration where the build
+            # succeeds but the resulting ELF targets the wrong machine.
+            - name: Verify ELF architecture
+              run: |
+                SO="$GITHUB_WORKSPACE/flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-linux-${{ matrix.arch }}.so"
+                case "${{ matrix.arch }}" in
+                    x86_64)      EXPECT="Advanced Micro Devices X86-64" ;;
+                    x86)         EXPECT="Intel 80386" ;;
+                    arm64)       EXPECT="AArch64" ;;
+                    riscv64)     EXPECT="RISC-V" ;;
+                    loongarch64) EXPECT="LoongArch" ;;
+                esac
+
+                echo "File: $SO"
+                file "$SO"
+                echo
+                readelf -h "$SO" | grep -E "Class|Machine"
+                echo
+                MACHINE=$(readelf -h "$SO" | awk -F: '/Machine:/ {sub(/^[ \t]+/,"",$2); print $2}')
+                if [ "$MACHINE" != "$EXPECT" ]; then
+                    echo "::error::ELF machine mismatch. Expected '$EXPECT' for ${{ matrix.arch }}, got '$MACHINE'."
+                    exit 1
+                fi
+                echo "OK: ELF machine is '$MACHINE' as expected."
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
