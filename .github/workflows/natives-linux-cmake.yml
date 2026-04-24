@@ -217,8 +217,12 @@ jobs:
                 for dir in artifacts/*/; do
                     name=$(basename "$dir")
                     arch="${name#FlatLaf-natives-linux-}"
-                    mkdir -p "out/linux-$arch"
-                    cp "$dir"flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-linux-$arch.so "out/linux-$arch/"
+                    case "$arch" in
+                        arm64) dir_arch=aarch64 ;;
+                        *)     dir_arch=$arch ;;
+                    esac
+                    mkdir -p "out/linux-$dir_arch"
+                    cp "$dir"flatlaf-core/src/main/resources/com/formdev/flatlaf/natives/libflatlaf-linux-$arch.so "out/linux-$dir_arch/"
                 done
                 find out -type f
 
