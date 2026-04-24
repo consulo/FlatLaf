@@ -88,7 +88,7 @@ jobs:
                 apt-get update
 
             - name: Install target-arch GTK (multiarch)
-              if: matrix.dpkg_arch != 'amd64' && matrix.dpkg_arch != 'loong64'
+              if: matrix.dpkg_arch != 'loong64'
               run: |
                 apt-get install -y --no-install-recommends \
                     libgtk-3-dev:${{ matrix.dpkg_arch }}
@@ -114,18 +114,25 @@ jobs:
               if: matrix.dpkg_arch == 'loong64'
               run: |
                 apt-get install -y --no-install-recommends \
-                    mmdebstrap debian-ports-archive-keyring
+                    mmdebstrap debian-ports-archive-keyring \
+                    debian-archive-keyring
 
                 SNAPSHOT=20260115T000000Z
                 SYSROOT=/opt/loong64-sysroot
 
+                # Two sources needed: arch:loong64 packages come from
+                # debian-ports; Architecture: all packages (e.g. libasound2-data)
+                # come from the main debian archive. Both pinned to the same
+                # snapshot date so versions align.
                 mmdebstrap \
                     --architectures=loong64 \
                     --variant=extract \
                     --include=libgtk-3-dev,openjdk-21-jre \
+                    --keyring=/usr/share/keyrings/debian-archive-keyring.gpg \
                     --keyring=/usr/share/keyrings/debian-ports-archive-keyring.gpg \
                     --aptopt='Acquire::Check-Valid-Until "false"' \
                     sid "$SYSROOT" \
+                    "deb http://snapshot.debian.org/archive/debian/${SNAPSHOT}/ sid main" \
                     "deb http://snapshot.debian.org/archive/debian-ports/${SNAPSHOT}/ sid main"
 
                 JAWT=$(find "$SYSROOT" -name libjawt.so -print -quit)
