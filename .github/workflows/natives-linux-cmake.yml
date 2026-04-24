@@ -58,6 +58,47 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            # Run BEFORE any apt-get install so later steps pull matching
+            # versions. Only loong64 needs special handling today: sid's
+            # amd64 has moved to gcc-16 while debian-ports' loong64 is still
+            # on gcc-15, producing a Multi-Arch: same version conflict on
+            # libgcc-s1. Pin both archives to a snapshot from before the
+            # gcc-16 transition (2026-04-23) so versions match.
+            - name: Setup apt sources
+              run: |
+                if [ "${{ matrix.dpkg_arch }}" != "loong64" ]; then
+                    exit 0
+                fi
+
+                SNAPSHOT=20260415T000000Z
+                echo 'Acquire::Check-Valid-Until "false";' \
+                    > /etc/apt/apt.conf.d/99no-check-valid
+
+                rm -f /etc/apt/sources.list
+                rm -f /etc/apt/sources.list.d/*.sources
+                rm -f /etc/apt/sources.list.d/*.list
+
+                cat > /etc/apt/sources.list.d/sid.sources <<EOF
+                Types: deb
+                URIs: http://snapshot.debian.org/archive/debian/${SNAPSHOT}/
+                Suites: sid
+                Components: main
+                Architectures: amd64
+                Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+                EOF
+
+                apt-get update
+                apt-get install -y --no-install-recommends debian-ports-archive-keyring
+
+                cat > /etc/apt/sources.list.d/debian-ports.sources <<EOF
+                Types: deb
+                URIs: http://snapshot.debian.org/archive/debian-ports/${SNAPSHOT}/
+                Suites: sid
+                Components: main
+                Architectures: loong64
+                Signed-By: /usr/share/keyrings/debian-ports-archive-keyring.gpg
+                EOF
+
             - name: Install base build tools
               run: |
                 apt-get update
@@ -82,30 +123,6 @@ jobs:
                 if [ "${{ matrix.dpkg_arch }}" = "amd64" ]; then
                     exit 0
                 fi
-
-                # loong64 is not yet a Debian release architecture; packages
-                # live in debian-ports. Restrict the default (release) sources
-                # to the host arch so apt does not 404 looking for loong64
-                # Packages files there, then add debian-ports as an extra
-                # source limited to loong64.
-                if [ "${{ matrix.dpkg_arch }}" = "loong64" ]; then
-                    for f in /etc/apt/sources.list.d/debian.sources; do
-                        if [ -f "$f" ] && ! grep -q '^Architectures:' "$f"; then
-                            sed -i '/^Suites:/a Architectures: amd64' "$f"
-                        fi
-                    done
-                    apt-get update
-                    apt-get install -y --no-install-recommends debian-ports-archive-keyring
-                    cat > /etc/apt/sources.list.d/debian-ports.sources <<'EOF'
-                Types: deb
-                URIs: http://deb.debian.org/debian-ports
-                Suites: sid
-                Components: main
-                Architectures: loong64
-                Signed-By: /usr/share/keyrings/debian-ports-archive-keyring.gpg
-                EOF
-                fi
-
                 dpkg --add-architecture ${{ matrix.dpkg_arch }}
                 apt-get update
 
