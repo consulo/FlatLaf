@@ -16,16 +16,6 @@
 # Developer Command Prompt before invoking CMake.
 
 cmake_minimum_required(VERSION 3.16)
-
-# Force the pre-3.15 CRT selection model: /MD (release) and /MDd (debug) are
-# injected directly into CMAKE_CXX_FLAGS_RELEASE / ..._DEBUG. The newer
-# (CMP0091 NEW) model selects the CRT via the MSVC_RUNTIME_LIBRARY property,
-# but the Visual Studio generator in CMake 3.16 does not reliably emit
-# /MD into the generated .vcxproj for this project — leaving vcruntime.lib
-# unlinked and C++ exception symbols (__CxxFrameHandler3/4, __std_terminate)
-# unresolved. Must be set before project().
-cmake_policy(SET CMP0091 OLD)
-
 project(flatlaf-natives-windows LANGUAGES CXX)
 
 if(NOT DEFINED FLATLAF_ARCH)
@@ -81,8 +71,15 @@ target_include_directories(${LIB_BASENAME} PRIVATE
 target_compile_definitions(${LIB_BASENAME} PRIVATE UNICODE _UNICODE)
 
 if(MSVC)
-    # Match the Gradle build's MSVC flags.
-    target_compile_options(${LIB_BASENAME} PRIVATE /O2 /GS-)
+    # /MD selects the shared release CRT (msvcrt.dll + vcruntime.dll + ucrt).
+    # Without an explicit /M flag, cl.exe does not embed the
+    # #pragma comment(linker, "/DEFAULTLIB:VCRUNTIME") directives into .obj
+    # files, and link.exe then fails to resolve __CxxFrameHandler3/4 and
+    # __std_terminate. Neither CMAKE_MSVC_RUNTIME_LIBRARY nor policy CMP0091
+    # got this flag through to cl.exe reliably in the Visual Studio generator
+    # path, so we set it explicitly on the target. /EHsc is CMake's MSVC
+    # default but included here for clarity.
+    target_compile_options(${LIB_BASENAME} PRIVATE /MD /EHsc /O2 /GS-)
 else()
     target_compile_options(${LIB_BASENAME} PRIVATE -O2)
 endif()
