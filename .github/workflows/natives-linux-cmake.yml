@@ -94,7 +94,22 @@ jobs:
                 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
                 EOF
 
+                # The base debian:sid image ships with current (gcc-16)
+                # packages pre-installed. Without this, apt picks the
+                # already-installed newer version instead of the snapshot's
+                # gcc-15 packages, defeating the whole pinning exercise.
+                # Priority > 1000 allows downgrades.
+                cat > /etc/apt/preferences.d/99pin-snapshot <<EOF
+                Package: *
+                Pin: origin snapshot.debian.org
+                Pin-Priority: 1001
+                EOF
+
                 apt-get update
+                # Downgrade pre-installed amd64 packages to match the snapshot,
+                # so libgcc-s1 / libc6 versions line up with the loong64 ones.
+                apt-get -y --allow-downgrades full-upgrade
+
                 apt-get install -y --no-install-recommends debian-ports-archive-keyring
 
                 cat > /etc/apt/sources.list.d/debian-ports.sources <<EOF
@@ -112,7 +127,7 @@ jobs:
                 # openjdk-21-jdk (not -headless) is required for jawt.h,
                 # which the -headless variant strips along with AWT/Swing.
                 apt-get install -y --no-install-recommends \
-                    ca-certificates cmake make pkg-config \
+                    ca-certificates cmake make pkg-config binutils \
                     openjdk-21-jdk
 
             - name: Install compiler for ${{ matrix.arch }}
