@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>consulo.internal</groupId>
+		<artifactId>flatlaf-parent</artifactId>
+		<version>3.7.2.1</version>
+	</parent>
+
+	<artifactId>flatlaf-swingx</artifactId>
+	<packaging>jar</packaging>
+
+	<name>FlatLaf addon for SwingX</name>
+	<description>Flat Look and Feel addon for SwingX</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>consulo.internal</groupId>
+			<artifactId>flatlaf</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<!-- compileOnly: there are several SwingX libraries on Maven Central -->
+		<dependency>
+			<groupId>org.swinglabs.swingx</groupId>
+			<artifactId>swingx-all</artifactId>
+			<version>${swingx.version}</version>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!--
+				Single compile to Java 21:
+				 - src/main/java        (default source root)
+				 - src/main/module-info (added as source root, contains module-info.java)
+			-->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>add-extra-sources</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${project.basedir}/src/main/module-info</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<release>21</release>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+</project>

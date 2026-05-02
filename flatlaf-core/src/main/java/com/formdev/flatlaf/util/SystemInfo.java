@@ -102,8 +102,9 @@ public class SystemInfo
 		isJava_18_orLater = (javaVersion >= toVersion( 18, 0, 0, 0 ));
 
 		// Java VMs
-		isJetBrainsJVM = System.getProperty( "java.vm.vendor", "Unknown" )
-			.toLowerCase( Locale.ENGLISH ).contains( "jetbrains" );
+		String vendorName = System.getProperty("java.vm.vendor", "Unknown")
+				.toLowerCase(Locale.ENGLISH);
+		isJetBrainsJVM = vendorName.contains( "jetbrains" ) || vendorName.contains( "consulo" );
 		isJetBrainsJVM_11_orLater = isJetBrainsJVM && isJava_11_orLater;
 
 		// UI toolkits

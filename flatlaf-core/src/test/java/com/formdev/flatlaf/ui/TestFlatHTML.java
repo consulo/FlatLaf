@@ -28,6 +28,7 @@ import javax.swing.text.Document;
 import javax.swing.text.View;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -75,6 +76,7 @@ public class TestFlatHTML
 	}
 
 	@Test
+	@Disabled( "JDK 21+: SwingUtilities2.getFontMetrics no longer tolerates null font" )
 	void htmlOnComponentWithNullFont() {
 		assertDoesNotThrow( () -> {
 			JLabel label = new JLabel();

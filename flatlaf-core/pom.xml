@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>consulo.internal</groupId>
+		<artifactId>flatlaf-parent</artifactId>
+		<version>3.7.2.1</version>
+	</parent>
+
+	<artifactId>flatlaf</artifactId>
+	<packaging>jar</packaging>
+
+	<name>FlatLaf</name>
+	<description>Flat Look and Feel</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<excludes>
+					<exclude>com/formdev/flatlaf/natives/**</exclude>
+				</excludes>
+			</resource>
+		</resources>
+
+		<plugins>
+			<!-- Make src/main/java9 and src/main/module-info visible to IDEs and the source jar. -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>add-extra-sources</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${project.basedir}/src/main/java9</source>
+								<source>${project.basedir}/src/main/module-info</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!--
+				All sources compile to Java 21, but in three sequential passes so we can
+				exclude old impls from src/main/java that are replaced by src/main/java9:
+
+				 1. compile-java9        : src/main/java9        -> target/classes
+				 2. default-compile      : src/main/java         -> target/classes (excludes Java-8 impls)
+				 3. compile-module-info  : src/main/module-info  -> target/classes
+
+				Each execution overrides compileSourceRoots so the excludes apply only to
+				src/main/java and javac doesn't pick up the duplicates via sourcepath.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>compile-java9</id>
+						<phase>compile</phase>
+						<goals>
+							<goal>compile</goal>
+						</goals>
+						<configuration>
+							<release>21</release>
+							<compileSourceRoots>
+								<compileSourceRoot>${project.basedir}/src/main/java9</compileSourceRoot>
+							</compileSourceRoots>
+						</configuration>
+					</execution>
+					<execution>
+						<id>default-compile</id>
+						<configuration>
+							<release>21</release>
+							<compileSourceRoots>
+								<compileSourceRoot>${project.basedir}/src/main/java</compileSourceRoot>
+							</compileSourceRoots>
+							<!-- old (Java 8) implementations replaced by counterparts in src/main/java9 -->
+							<excludes>
+								<exclude>com/formdev/flatlaf/util/LoggingFacadeImpl.java</exclude>
+								<exclude>com/formdev/flatlaf/util/MultiResolutionImageSupport.java</exclude>
+								<exclude>com/formdev/flatlaf/ui/StackUtilsImpl.java</exclude>
+							</excludes>
+						</configuration>
+					</execution>
+					<execution>
+						<id>compile-module-info</id>
+						<phase>compile</phase>
+						<goals>
+							<goal>compile</goal>
+						</goals>
+						<configuration>
+							<release>21</release>
+							<compileSourceRoots>
+								<compileSourceRoot>${project.basedir}/src/main/module-info</compileSourceRoot>
+							</compileSourceRoots>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>--add-opens java.desktop/javax.swing.plaf.basic=ALL-UNNAMED</argLine>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>
