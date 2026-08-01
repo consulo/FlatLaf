@@ -1450,7 +1450,7 @@ class UIDefaultsLoader
 		return font;
 	}
 
-	private static int parsePercentage( String value )
+	static int parsePercentage( String value )
 		throws IllegalArgumentException, NumberFormatException
 	{
 		if( !value.endsWith( "%" ) )
@@ -1500,7 +1500,7 @@ class UIDefaultsLoader
 		return integer;
 	}
 
-	private static Integer parseInteger( String value )
+	static Integer parseInteger( String value )
 		throws NumberFormatException
 	{
 		try {
@@ -1591,7 +1591,7 @@ class UIDefaultsLoader
 	 * Splits function parameters and allows using functions as parameters.
 	 * In other words: Delimiters surrounded by '(' and ')' are ignored.
 	 */
-	private static List<String> splitFunctionParams( String str, char delim ) {
+	static List<String> splitFunctionParams( String str, char delim ) {
 		ArrayList<String> strs = new ArrayList<>();
 		int nestLevel = 0;
 		int start = 0;
