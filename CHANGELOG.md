@@ -1,6 +1,15 @@
 FlatLaf Change Log
 ==================
 
+## 3.8-SNAPSHOT
+
+#### Fixed bugs
+
+- ScrollPane: When using rounded border and scrollpane width was near view
+  width, then the horizontal scrollbar was shown even when it was not necessary.
+  (issue #1135)
+
+
 ## 3.7.2
 
 - System File Chooser:

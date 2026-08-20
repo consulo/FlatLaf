@@ -18,6 +18,7 @@ package com.formdev.flatlaf.ui;
 
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
@@ -562,6 +563,10 @@ public class FlatScrollPaneUI
 		public void layoutContainer( Container parent ) {
 			super.layoutContainer( parent );
 
+			// if scrollpane has rounded border:
+			// - move vertical scrollbar to trailing edge
+			// - increase width of viewport, column header and horizontal scrollbar
+			// - hide horizontal scrollbar if not needed (in case viewport became wider)
 			JScrollPane scrollPane = (JScrollPane) parent;
 			int padding = getBorderLeftRightPadding( scrollPane );
 			if( padding > 0 && vsb != null && vsb.isVisible() ) {
@@ -577,9 +582,26 @@ public class FlatScrollPaneUI
 				// increase width of viewport, column header and horizontal scrollbar
 				if( canIncreaseViewportWidth( scrollPane ) ) {
 					int extraWidth = Math.min( padding, vsb.getWidth() );
-					resizeViewport( viewport, extraWidth, ltr );
-					resizeViewport( colHead, extraWidth, ltr );
-					resizeViewport( hsb, extraWidth, ltr );
+					int extraViewportHeight = 0;
+
+					// check whether horizontal scrollbar is still needed when viewport becomes wider
+					// if not, hide it and increase viewport height
+					if( viewport != null && hsb != null && hsb.isVisible() && hsbPolicy == HORIZONTAL_SCROLLBAR_AS_NEEDED ) {
+						Component view = viewport.getView();
+						int viewPrefWidth = (view != null) ? view.getPreferredSize().width : 0;
+						Dimension extentSize = viewport.toViewCoordinates(
+							new Dimension( viewport.getWidth() + extraWidth, viewport.getHeight() ) );
+						boolean viewTracksViewportWidth = (view instanceof Scrollable) ? ((Scrollable)view).getScrollableTracksViewportWidth() : false;
+						boolean hsbNeeded = !viewTracksViewportWidth && (viewPrefWidth > extentSize.width);
+						if( !hsbNeeded ) {
+							hsb.setVisible( false );
+							extraViewportHeight = hsb.getHeight();
+						}
+					}
+
+					resizeViewport( viewport, extraWidth, extraViewportHeight, ltr );
+					resizeViewport( colHead, extraWidth, 0, ltr );
+					resizeViewport( hsb, extraWidth, 0, ltr );
 				}
 			}
 		}
@@ -597,12 +619,12 @@ public class FlatScrollPaneUI
 				corner.isVisible();
 		}
 
-		private static void resizeViewport( Component c, int extraWidth, boolean ltr ) {
+		private static void resizeViewport( Component c, int extraWidth, int extraHeight, boolean ltr ) {
 			if( c == null )
 				return;
 
 			Rectangle vr = c.getBounds();
-			c.setBounds( vr.x - (ltr ? 0 : extraWidth), vr.y, vr.width + extraWidth, vr.height );
+			c.setBounds( vr.x - (ltr ? 0 : extraWidth), vr.y, vr.width + extraWidth, vr.height + extraHeight );
 		}
 	}
 }
