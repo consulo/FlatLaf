@@ -570,19 +570,12 @@ public class FlatScrollPaneUI
 			JScrollPane scrollPane = (JScrollPane) parent;
 			int padding = getBorderLeftRightPadding( scrollPane );
 			if( padding > 0 && vsb != null && vsb.isVisible() ) {
-				// move vertical scrollbar to trailing edge
-				Insets insets = scrollPane.getInsets();
-				Rectangle r = vsb.getBounds();
-				int y = Math.max( r.y, insets.top + padding );
-				int y2 = Math.min( r.y + r.height, scrollPane.getHeight() - insets.bottom - padding );
 				boolean ltr = scrollPane.getComponentOrientation().isLeftToRight();
 
-				vsb.setBounds( r.x + (ltr ? padding : -padding), y, r.width, y2 - y );
-
 				// increase width of viewport, column header and horizontal scrollbar
+				int extraViewportHeight = 0;
 				if( canIncreaseViewportWidth( scrollPane ) ) {
 					int extraWidth = Math.min( padding, vsb.getWidth() );
-					int extraViewportHeight = 0;
 
 					// check whether horizontal scrollbar is still needed when viewport becomes wider
 					// if not, hide it and increase viewport height
@@ -596,6 +589,7 @@ public class FlatScrollPaneUI
 						if( !hsbNeeded ) {
 							hsb.setVisible( false );
 							extraViewportHeight = hsb.getHeight();
+							resizeViewport( rowHead, 0, extraViewportHeight, ltr );
 						}
 					}
 
@@ -603,6 +597,14 @@ public class FlatScrollPaneUI
 					resizeViewport( colHead, extraWidth, 0, ltr );
 					resizeViewport( hsb, extraWidth, 0, ltr );
 				}
+
+				// move vertical scrollbar to trailing edge
+				// (adjust y and height so that is does not overlap rounded border)
+				Insets insets = scrollPane.getInsets();
+				Rectangle r = vsb.getBounds();
+				int y = Math.max( r.y, insets.top + padding );
+				int y2 = Math.min( r.y + r.height + extraViewportHeight, scrollPane.getHeight() - insets.bottom - padding );
+				vsb.setBounds( r.x + (ltr ? padding : -padding), y, r.width, y2 - y );
 			}
 		}
 
