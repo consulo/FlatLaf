@@ -5,6 +5,8 @@ FlatLaf Change Log
 
 #### Fixed bugs
 
+- FileChooser: Fixed selection painting in "Details" view when theme uses
+  rounded selection. (issue #1137)
 - ScrollPane: When using rounded border and scrollpane width was near view
   width, then the horizontal scrollbar was shown even when it was not necessary.
   (issue #1135)
