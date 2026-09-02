@@ -885,7 +885,7 @@ class FlatThemeFileEditor
 				titleLabel,
 				"Edits FlatLaf Swing look and feel theme files",
 				" ",
-				"Copyright 2019-" + Year.now() + " FormDev Software GmbH",
+				"Copyright 2019-" + Year.now() + " FormDev Software",
 				linkLabel,
 			},
 			"About", JOptionPane.PLAIN_MESSAGE );
