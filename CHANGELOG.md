@@ -14,6 +14,8 @@ FlatLaf Change Log
   (issue #1135)
 - Make sure that `META-INF/MANIFEST.MF` is first jar entry, so that tools that
   use `JarInputStream` readers see `Multi-Release: true`. (issue #1139)
+- Extras:
+  - `FlatSVGIcon`: Fixed wrong color when SVG uses `fill="currentColor"`. (issue #1144)
 
 
 ## 3.7.2
