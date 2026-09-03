@@ -3,6 +3,12 @@ FlatLaf Change Log
 
 ## 3.8-SNAPSHOT
 
+#### New features and improvements
+
+- Added support for [Oklab](https://bottosson.github.io/posts/oklab/) and linear sRGB
+  color spaces to color functions `mix()`, `tint()` and `shade()`. (PR #1132, issue #1109)
+- Theme Editor: Added preview for color functions. (see PR #1132)
+
 #### Fixed bugs
 
 - FileChooser:
