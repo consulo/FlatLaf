@@ -16,6 +16,7 @@
 
 package com.formdev.flatlaf.util;
 
+import java.awt.Toolkit;
 import java.util.Locale;
 import java.util.StringTokenizer;
 import com.formdev.flatlaf.ui.FlatNativeWindowsLibrary;
@@ -144,6 +145,28 @@ public class SystemInfo
 			LoggingFacade.INSTANCE.logSevere( null, ex );
 		}
 		isWindows_11_orLater = isWin_11_orLater;
+	}
+
+	private static Boolean isWayland;
+
+	/**
+	 * Checks whether the Wayland AWT toolkit ({@code sun.awt.wl.WLToolkit}) is used.
+	 * <p>
+	 * This is the case on Linux for Java distributions that support the Wayland toolkit
+	 * (e.g. OpenJDK Project Wakefield or JetBrains Runtime) if it has been enabled with
+	 * VM option {@code -Dawt.toolkit.name=WLToolkit} (or {@code =auto} in a Wayland session).
+	 * <p>
+	 * Note that this returns {@code false} when running under XWayland, because the
+	 * application then uses the X Window System toolkit.
+	 * <p>
+	 * Evaluated lazily, and cached, because it initializes the AWT toolkit.
+	 *
+	 * @since 3.8
+	 */
+	public static boolean isWayland() {
+		if( isWayland == null )
+			isWayland = isLinux && Toolkit.getDefaultToolkit().getClass().getName().endsWith( ".WLToolkit" );
+		return isWayland;
 	}
 
 	public static long scanVersion( String version ) {

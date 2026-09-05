@@ -787,7 +787,7 @@ public class SystemFileChooser
 			return new MacFileChooserProvider();
 		else if( SystemInfo.isLinux && FlatNativeLinuxLibrary.isLoaded() &&
 				FlatNativeLinuxLibrary.isGtk3Available() &&
-				!Toolkit.getDefaultToolkit().getClass().getName().endsWith( ".WLToolkit" ) )
+				!SystemInfo.isWayland() )
 			return new LinuxFileChooserProvider();
 		else // unknown platform or FlatLaf native library not loaded
 			return new SwingFileChooserProvider();

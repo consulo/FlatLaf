@@ -191,6 +191,22 @@ public abstract class FlatWindowResizer
 	protected void beginResizing( int resizeDir, MouseEvent e ) {}
 	protected void endResizing() {}
 
+	/**
+	 * Adjusts a resize direction (a {@code *_RESIZE_CURSOR} constant of
+	 * {@link java.awt.Cursor}) before it is used for the mouse cursor and for resizing.
+	 * Allows subclasses to limit resizing to some directions.
+	 * Return {@link java.awt.Cursor#DEFAULT_CURSOR} to disable resizing in that direction.
+	 * <p>
+	 * <b>Note</b>: This is invoked from the constructor of {@link DragBorderComponent},
+	 *              which runs while this class is still being constructed.
+	 *              Implementations must not access subclass instance fields.
+	 *
+	 * @since 3.8
+	 */
+	protected int adjustResizeDir( int resizeDir ) {
+		return resizeDir;
+	}
+
 	//---- interface PropertyChangeListener ----
 
 	@Override
@@ -252,7 +268,9 @@ public abstract class FlatWindowResizer
 			// On Linux, limit window resizing to screen bounds because otherwise
 			// there would be a strange effect when the mouse is moved over a sidebar
 			// while resizing and the opposite window side is also resized.
-			limitResizeToScreenBounds = SystemInfo.isLinux;
+			// Not on Wayland, where the window location is not available and the
+			// limit would be computed from a wrong window origin.
+			limitResizeToScreenBounds = SystemInfo.isLinux && !SystemInfo.isWayland();
 		}
 
 		@Override
@@ -367,6 +385,13 @@ public abstract class FlatWindowResizer
 		@Override
 		public void windowStateChanged( WindowEvent e ) {
 			updateVisibility();
+		}
+
+		@Override
+		protected int adjustResizeDir( int resizeDir ) {
+			// on Wayland, resizing at top or left window edge is not possible
+			// Note: invoked from super constructor; must not access instance fields
+			return FlatWaylandWmUtils.adjustResizeDir( resizeDir );
 		}
 
 		@Override
@@ -512,6 +537,7 @@ public abstract class FlatWindowResizer
 		private final int trailingResizeDir;
 
 		private int resizeDir = -1;
+		private final boolean allResizeDirsDisabled;
 
 		private int leadingCornerDragWidth;
 		private int trailingCornerDragWidth;
@@ -526,6 +552,10 @@ public abstract class FlatWindowResizer
 			this.leadingResizeDir = leadingResizeDir;
 			this.centerResizeDir = centerResizeDir;
 			this.trailingResizeDir = trailingResizeDir;
+			this.allResizeDirsDisabled =
+				adjustResizeDir( leadingResizeDir ) == DEFAULT_CURSOR &&
+				adjustResizeDir( centerResizeDir ) == DEFAULT_CURSOR &&
+				adjustResizeDir( trailingResizeDir ) == DEFAULT_CURSOR;
 
 			setResizeDir( centerResizeDir );
 			setVisible( false );
@@ -540,11 +570,20 @@ public abstract class FlatWindowResizer
 		}
 
 		protected void setResizeDir( int resizeDir ) {
+			resizeDir = adjustResizeDir( resizeDir );
 			if( this.resizeDir == resizeDir )
 				return;
 			this.resizeDir = resizeDir;
 
 			setCursor( getPredefinedCursor( resizeDir ) );
+		}
+
+		@Override
+		public boolean contains( int x, int y ) {
+			// if resizing is disabled for all directions of this border (which is the case
+			// for the top and left borders on Wayland), then let mouse events pass through
+			// to the components below (e.g. to the title bar, which moves the window)
+			return !allResizeDirsDisabled && super.contains( x, y );
 		}
 
 		@Override
@@ -586,7 +625,7 @@ debug*/
 
 		@Override
 		public void mousePressed( MouseEvent e ) {
-			if( !SwingUtilities.isLeftMouseButton( e ) || !isWindowResizable() )
+			if( !SwingUtilities.isLeftMouseButton( e ) || !isWindowResizable() || resizeDir == DEFAULT_CURSOR )
 				return;
 
 			int xOnScreen = e.getXOnScreen();
@@ -604,7 +643,7 @@ debug*/
 
 		@Override
 		public void mouseReleased( MouseEvent e ) {
-			if( !SwingUtilities.isLeftMouseButton( e ) || !isWindowResizable() )
+			if( !SwingUtilities.isLeftMouseButton( e ) || !isWindowResizable() || resizeDir == DEFAULT_CURSOR )
 				return;
 
 			dragLeftOffset = dragRightOffset = dragTopOffset = dragBottomOffset = 0;
@@ -630,7 +669,7 @@ debug*/
 
 		@Override
 		public void mouseDragged( MouseEvent e ) {
-			if( !SwingUtilities.isLeftMouseButton( e ) || !isWindowResizable() )
+			if( !SwingUtilities.isLeftMouseButton( e ) || !isWindowResizable() || resizeDir == DEFAULT_CURSOR )
 				return;
 
 			int xOnScreen = e.getXOnScreen();

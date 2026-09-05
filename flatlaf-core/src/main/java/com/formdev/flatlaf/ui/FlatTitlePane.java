@@ -877,6 +877,9 @@ public class FlatTitlePane
 		// (if not having native window border and if not modified from the application)
 		Rectangle oldMaximizedBounds = frame.getMaximizedBounds();
 		if( !hasNativeCustomDecoration() &&
+			// on Wayland, the compositor owns the bounds of maximized windows
+			// and Frame.setMaximizedBounds() has no effect
+			!SystemInfo.isWayland() &&
 			(oldMaximizedBounds == null ||
 			 Objects.equals( oldMaximizedBounds, rootPane.getClientProperty( "_flatlaf.maximizedBounds" ) )) &&
 			window.getGraphicsConfiguration() != null )
@@ -1500,6 +1503,14 @@ debug*/
 				return;
 			}
 
+			// on Wayland, show window menu provided by the compositor
+			if( SwingUtilities.isRightMouseButton( e ) &&
+				FlatWaylandWmUtils.showWindowMenu( window, e ) )
+			{
+				e.consume();
+				return;
+			}
+
 			if( !SwingUtilities.isLeftMouseButton( e ) )
 				return;
 
@@ -1530,6 +1541,13 @@ debug*/
 			// on Linux, move window using window manager
 			if( SystemInfo.isLinux && FlatNativeLinuxLibrary.isWMUtilsSupported( window ) ) {
 				linuxNativeMove = FlatNativeLinuxLibrary.moveOrResizeWindow( window, e, FlatNativeLinuxLibrary.MOVE );
+				if( linuxNativeMove )
+					return;
+			}
+
+			// on Wayland, move window using compositor
+			if( FlatWaylandWmUtils.canMoveWindow( window ) ) {
+				linuxNativeMove = FlatWaylandWmUtils.moveWindow( window );
 				if( linuxNativeMove )
 					return;
 			}

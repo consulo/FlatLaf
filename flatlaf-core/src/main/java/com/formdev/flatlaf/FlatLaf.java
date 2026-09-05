@@ -78,6 +78,7 @@ import com.formdev.flatlaf.ui.FlatNativeWindowBorder;
 import com.formdev.flatlaf.ui.FlatPopupFactory;
 import com.formdev.flatlaf.ui.FlatRootPaneUI;
 import com.formdev.flatlaf.ui.FlatUIUtils;
+import com.formdev.flatlaf.ui.FlatWaylandWmUtils;
 import com.formdev.flatlaf.ui.JavaCompatibility2;
 import com.formdev.flatlaf.ui.FlatStylingSupport.StyleableUI;
 import com.formdev.flatlaf.util.FontUtils;
@@ -250,7 +251,9 @@ public abstract class FlatLaf
 		//     https://youtrack.jetbrains.com/issue/JBR-10322
 		// Note: This affects only Java distributions that support Wayland toolkit
 		// (e.g. JetBrains JBR) and have enabled it with VM option: -Dawt.toolkit.name=WLToolkit
-		if( SystemInfo.isLinux && Toolkit.getDefaultToolkit().getClass().getName().endsWith( ".WLToolkit" ) )
+		// Exception: if the JetBrains Runtime window move API is available, then moving
+		// windows is delegated to the Wayland compositor (see FlatWaylandWmUtils)
+		if( SystemInfo.isWayland() && !FlatWaylandWmUtils.isSupported() )
 			return false;
 
 		return SystemInfo.isWindows_10_orLater || SystemInfo.isLinux;
@@ -306,6 +309,10 @@ public abstract class FlatLaf
 			initializeAqua();
 
 		super.initialize();
+
+		// on Wayland, resolve JetBrains Runtime window move API in the background
+		// (used in getSupportsWindowDecorations(), which is invoked from JFrame.frameInit())
+		FlatWaylandWmUtils.preload();
 
 		// install popup factory
 		oldPopupFactory = PopupFactory.getSharedInstance();
