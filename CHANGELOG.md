@@ -1,18 +1,59 @@
 FlatLaf Change Log
 ==================
 
-## 3.7.2-SNAPSHOT
+## 3.8-SNAPSHOT
+
+#### New features and improvements
+
+- Added support for [Oklab](https://bottosson.github.io/posts/oklab/) and linear sRGB
+  color spaces to color functions `mix()`, `tint()` and `shade()`. (PR #1132, issue #1109)
+- Theme Editor: Added preview for color functions. (see PR #1132)
+
+#### Fixed bugs
+
+- FileChooser:
+  - Fixed selection painting in "Details" view when theme uses rounded
+    selection. (issue #1137)
+  - Directory combobox did not have rounded border. (issue #957)
+- ScrollPane: When using rounded border and scrollpane width was near view
+  width, then the horizontal scrollbar was shown even when it was not necessary.
+  (issue #1135)
+- Make sure that `META-INF/MANIFEST.MF` is first jar entry, so that tools that
+  use `JarInputStream` readers see `Multi-Release: true`. (issue #1139)
+- Extras:
+  - `FlatSVGIcon`: Fixed wrong color when SVG uses `fill="currentColor"`. (issue #1144)
+
+
+## 3.7.2
 
 - System File Chooser:
   - macOS: `Cmd+A` (**Select All**) did not work in file dialog. (issue #1084)
   - Block Swing input events (mouse, keyboard, etc.) while system file dialog is
     shown. (issue #1100)
+  - Windows: Fixed too small message dialogs (shown from approve callback).
+    (issue #1119)
+  - Windows: Don't allow selecting non-filesystem nodes (e.g. "This PC") in
+    "Select Folder" dialog. (issue #1126)
 - macOS: Fixed missing close/iconify/maximize buttons on inactive window, if
   system appearance is dark, but application appearance is light. (issue #1032)
 - Linux with JetBrains Runtime: Fixed mouse "jumping" to other position when
   moving window on scaled secondary screen, if using FlatLaf window decorations.
   (issue #1103)
-
+- Linux with OpenJDK Project Wakefield (e.g. JetBrains JBR 25) and VM option
+  `-Dawt.toolkit.name=WLToolkit` (issue #1107):
+  - Disabled FlatLaf window decorations because of bug
+    [JBR-10322](https://youtrack.jetbrains.com/issue/JBR-10322).
+  - Disabled System File Chooser because application hangs after closing it.
+    Uses `JFileChooser` instead.
+- TableHeader: Fixed custom table header renderer background stops painting
+  after hover interactions. (issue #1089)
+- TextComponents: Fixed preferred width when leading/trailing components or
+  icons are present. (issue #1110)
+- Tree: Fixed repainting multi-selection when tree looses or gains focus. (issue
+  #1122)
+- JideTabbedPane: Support card tabs. (PR #1094)
+- Native libraries in Eclipse RCP: Fixed exception when runtime path contains
+  spaces. (issue #1102)
 
 ## 3.7.1
 

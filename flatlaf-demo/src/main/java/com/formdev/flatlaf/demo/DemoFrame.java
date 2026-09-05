@@ -250,7 +250,7 @@ class DemoFrame
 				titleLabel,
 				"Demonstrates FlatLaf Swing look and feel",
 				" ",
-				"Copyright 2019-" + Year.now() + " FormDev Software GmbH",
+				"Copyright 2019-" + Year.now() + " FormDev Software",
 				linkLabel,
 			},
 			"About", JOptionPane.PLAIN_MESSAGE );
@@ -632,7 +632,8 @@ class DemoFrame
 	}
 
 	private boolean supportsFlatLafWindowDecorations() {
-		return FlatLaf.supportsNativeWindowDecorations() || SystemInfo.isLinux;
+		return FlatLaf.supportsNativeWindowDecorations() ||
+			(SystemInfo.isLinux && new FlatLightLaf().getSupportsWindowDecorations());
 	}
 
 	private void initComponents() {
