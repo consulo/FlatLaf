@@ -888,7 +888,12 @@ public abstract class FlatLaf
 
 	private Object fallbackAATextInfo() {
 		// do nothing if explicitly overridden
-		if( System.getProperty( "awt.useSystemAAFontSettings" ) != null )
+		// Note: The Wayland AWT toolkit does not provide any desktop font hints
+		//       (sun.awt.wl.WLToolkit.lazilyLoadDesktopProperty() is not implemented)
+		//       and ignores this system property. Letting it disable the fallback there
+		//       would leave text without any anti-aliasing.
+		String aaFontSettings = System.getProperty( "awt.useSystemAAFontSettings" );
+		if( aaFontSettings != null && (!SystemInfo.isWayland() || "off".equals( aaFontSettings )) )
 			return null;
 
 		Object aaHint = null;
