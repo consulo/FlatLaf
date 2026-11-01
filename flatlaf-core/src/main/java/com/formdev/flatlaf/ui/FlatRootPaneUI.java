@@ -93,6 +93,7 @@ public class FlatRootPaneUI
 	private ComponentListener macFullWindowContentListener;
 	private PropertyChangeListener macWindowBackgroundListener;
 	private WindowListener macScreenMenuBarRefreshListener;
+	private FlatWaylandRoundedWindow waylandRoundedWindow;
 	private static boolean macScreenMenuBarRefreshed;
 
 	public static ComponentUI createUI( JComponent c ) {
@@ -263,9 +264,18 @@ public class FlatRootPaneUI
 		// install window resizer
 		if( !isNativeWindowBorderSupported )
 			windowResizer = createWindowResizer();
+
+		// round window corners on Wayland
+		if( FlatWaylandRoundedWindow.isSupported() )
+			waylandRoundedWindow = FlatWaylandRoundedWindow.install( rootPane );
 	}
 
 	protected void uninstallClientDecorations() {
+		if( waylandRoundedWindow != null ) {
+			waylandRoundedWindow.uninstall();
+			waylandRoundedWindow = null;
+		}
+
 		LookAndFeel.uninstallBorder( rootPane );
 		setTitlePane( null );
 
@@ -800,6 +810,10 @@ public class FlatRootPaneUI
 		@Override
 		public void paintBorder( Component c, Graphics g, int x, int y, int width, int height ) {
 			if( isWindowMaximized( c ) || FlatUIUtils.isFullScreen( c ) )
+				return;
+
+			// the rounded border is painted by the window (see FlatWaylandRoundedWindow)
+			if( c instanceof JComponent && ((JComponent)c).getClientProperty( FlatWaylandRoundedWindow.KEY_ROUNDED ) != null )
 				return;
 
 			Container parent = c.getParent();

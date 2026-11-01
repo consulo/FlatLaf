@@ -6,7 +6,7 @@
 
 	<groupId>consulo.internal</groupId>
 	<artifactId>flatlaf-parent</artifactId>
-	<version>3.7.2.4</version>
+	<version>3.7.2.5</version>
 	<packaging>pom</packaging>
 
 	<name>FlatLaf (parent)</name>
