@@ -115,7 +115,7 @@ public class FlatPopupFactory
 		// macOS and Linux adds drop shadow to heavy weight popups
 		if( SystemInfo.isMacOS || SystemInfo.isLinux ) {
 			NonFlashingPopup popup = new NonFlashingPopup( getPopupForScreenOfOwner( owner, contents, x, y, true ), owner, contents );
-			if( popup.popupWindow != null && isMacOSBorderSupported() )
+			if( popup.popupWindow != null && (isMacOSBorderSupported() || isWaylandBorderSupported()) )
 				setupRoundedBorder( popup.popupWindow, owner, contents );
 			return popup;
 		}
@@ -382,6 +382,12 @@ public class FlatPopupFactory
 			FlatNativeMacLibrary.isLoaded();
 	}
 
+	private static boolean isWaylandBorderSupported() {
+		return SystemInfo.isWayland() &&
+			FlatSystemProperties.getBoolean( FlatSystemProperties.USE_ROUNDED_POPUP_BORDER, true ) &&
+			FlatJBRSupport.isRoundedCornersSupported();
+	}
+
 	private static void setupRoundedBorder( Window popupWindow, Component owner, Component contents ) {
 		int borderCornerRadius = getBorderCornerRadius( owner, contents );
 		float borderWidth = getRoundedBorderWidth( owner, contents );
@@ -445,6 +451,13 @@ public class FlatPopupFactory
 			// set corner radius, border width and color
 			FlatNativeMacLibrary.setWindowRoundedBorder( popupWindow, borderCornerRadius,
 				borderWidth, (borderColor != null) ? borderColor.getRGB() : 0 );
+		} else if( SystemInfo.isWayland() ) {
+			// the JetBrains Runtime asks the compositor for rounded corners and draws the border
+			Float radius = UIScale.scale( (float) borderCornerRadius );
+			Object params = (borderColor == null || borderColor == FlatNativeWindowsLibrary.COLOR_NONE || borderWidth <= 0)
+				? radius
+				: new Object[] { radius, Math.max( 1, Math.round( UIScale.scale( borderWidth ) ) ), borderColor };
+			FlatJBRSupport.setRoundedCorners( popupWindow, params );
 		}
 	}
 

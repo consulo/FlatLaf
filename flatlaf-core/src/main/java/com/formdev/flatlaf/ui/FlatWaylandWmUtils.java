@@ -47,9 +47,7 @@ import com.formdev.flatlaf.util.SystemInfo;
  * {@code false}, then FlatLaf window decorations stay disabled on Wayland and the
  * compositor decorations are used (as in FlatLaf 3.7).
  * <p>
- * The JetBrains Runtime API is used via reflection only. FlatLaf has no compile-time
- * dependency on {@code jbr-api}. The reflective lookup is done at most once per JVM
- * (in the class initializer of the nested holder class) and never per mouse event.
+ * The JetBrains Runtime API is accessed via {@link FlatJBRSupport}.
  * <p>
  * <b>Note</b>: This is private API. Do not use!
  *
@@ -117,7 +115,9 @@ public class FlatWaylandWmUtils
 	public static boolean isSupported() {
 		// check Wayland first so that the JetBrains Runtime API is never loaded
 		// on Windows, macOS or on Linux with X Window System
-		return SystemInfo.isWayland() && JBRWindowMove.START_MOVING != null;
+		return SystemInfo.isWayland() &&
+			FlatSystemProperties.getBoolean( USE_WAYLAND_WINDOW_DECORATIONS, true ) &&
+			FlatJBRSupport.isWindowMoveSupported();
 	}
 
 	/**
@@ -164,7 +164,7 @@ public class FlatWaylandWmUtils
 		try {
 			// the mouse button is passed for API compatibility only;
 			// the Wayland implementation uses the current pointer input serial instead
-			JBRWindowMove.START_MOVING.invoke( JBRWindowMove.WINDOW_MOVE, window, MouseEvent.BUTTON1 );
+			FlatJBRSupport.startMovingTogetherWithMouse( window, MouseEvent.BUTTON1 );
 			return true;
 		} catch( Throwable ex ) {
 			if( !loggedMoveFailure ) {
@@ -209,16 +209,6 @@ public class FlatWaylandWmUtils
 		}
 	}
 
-	//---- class JBRWindowMove ------------------------------------------------
-
-	/**
-	 * Lazy holder for reflective access to {@code com.jetbrains.WindowMove}.
-	 * <p>
-	 * Initialized on first access to one of its fields, which happens in
-	 * {@link FlatWaylandWmUtils#isSupported()} and only if running on Wayland.
-	 * The JVM runs the class initializer exactly once, thread-safe, and safely
-	 * publishes both fields. Both fields are {@code null} if the API is not available.
-	 */
 	/**
 	 * Checks whether the window menu of the Wayland compositor can be shown for the given window.
 	 * &lt;p&gt;
@@ -338,67 +328,6 @@ public class FlatWaylandWmUtils
 			SERIAL = serial;
 			SHOW_WINDOW_MENU = showWindowMenu;
 			PEER = peer;
-		}
-	}
-
-	private static class JBRWindowMove
-	{
-		/** instance of {@code com.jetbrains.WindowMove}; or {@code null} if not available */
-		static final Object WINDOW_MOVE;
-		/** {@code com.jetbrains.WindowMove.startMovingTogetherWithMouse(Window,int)}; or {@code null} */
-		static final Method START_MOVING;
-
-		static {
-			Object windowMove = null;
-			Method startMoving = null;
-
-			try {
-				if( FlatSystemProperties.getBoolean( USE_WAYLAND_WINDOW_DECORATIONS, true ) ) {
-					Class<?> jbrClass = loadClass( "com.jetbrains.JBR" );
-					if( jbrClass != null &&
-						Boolean.TRUE.equals( jbrClass.getMethod( "isWindowMoveSupported" ).invoke( null ) ) )
-					{
-						// Note: getWindowMove() is overloaded; passing no parameter types
-						//       resolves the no-arg method exactly
-						Object service = jbrClass.getMethod( "getWindowMove" ).invoke( null );
-
-						// Note: resolving the method on the public and exported interface
-						//       because the implementation class is not accessible
-						Class<?> windowMoveClass = Class.forName( "com.jetbrains.WindowMove", false, jbrClass.getClassLoader() );
-						Method method = windowMoveClass.getMethod( "startMovingTogetherWithMouse", Window.class, int.class );
-
-						if( service != null && windowMoveClass.isInstance( service ) ) {
-							windowMove = service;
-							startMoving = method;
-						}
-					}
-				}
-			} catch( Throwable ex ) {
-				// JetBrains Runtime API not available, not on the class path, or not compatible
-				// --> silently keep FlatLaf window decorations disabled on Wayland
-				// (this is the expected case on any other Java runtime)
-			}
-
-			WINDOW_MOVE = windowMove;
-			START_MOVING = startMoving;
-		}
-
-		private static Class<?> loadClass( String className ) {
-			try {
-				return Class.forName( className, false, FlatWaylandWmUtils.class.getClassLoader() );
-			} catch( Throwable ex ) {
-				// ignore and try context class loader
-			}
-
-			try {
-				ClassLoader loader = Thread.currentThread().getContextClassLoader();
-				if( loader != null )
-					return Class.forName( className, false, loader );
-			} catch( Throwable ex ) {
-				// ignore
-			}
-
-			return null;
 		}
 	}
 }

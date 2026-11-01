@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>consulo.internal</groupId>
 		<artifactId>flatlaf-parent</artifactId>
-		<version>3.7.2.3</version>
+		<version>3.7.2.4</version>
 	</parent>
 
 	<artifactId>flatlaf</artifactId>
@@ -92,12 +92,25 @@
 							<compileSourceRoots>
 								<compileSourceRoot>${project.basedir}/src/main/java</compileSourceRoot>
 							</compileSourceRoots>
+							<!-- javac still resolves the excluded Java 8 LoggingFacadeImpl from the source path, which uses
+							     java.logging; compile-java9 overwrites it afterwards, so the module itself does not need it -->
+							<compilerArgs>
+								<arg>--add-reads</arg>
+								<arg>com.formdev.flatlaf=java.logging</arg>
+							</compilerArgs>
 							<!-- old (Java 8) implementations replaced by counterparts in src/main/java9 -->
 							<excludes>
 								<exclude>com/formdev/flatlaf/util/LoggingFacadeImpl.java</exclude>
 								<exclude>com/formdev/flatlaf/util/MultiResolutionImageSupport.java</exclude>
 								<exclude>com/formdev/flatlaf/ui/StackUtilsImpl.java</exclude>
 							</excludes>
+						</configuration>
+					</execution>
+					<execution>
+						<id>default-testCompile</id>
+						<configuration>
+							<!-- the tests use java.logging, which the module does not read -->
+							<useModulePath>false</useModulePath>
 						</configuration>
 					</execution>
 					<execution>
