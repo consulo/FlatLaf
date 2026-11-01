@@ -704,6 +704,8 @@ public class TestFlatStyleableInfo
 			"thumbSize", Dimension.class,
 			"focusWidth", int.class,
 			"thumbBorderWidth", float.class,
+			"trackArc", int.class,
+			"thumbArc", int.class,
 
 			"trackValueColor", Color.class,
 			"trackColor", Color.class,
@@ -764,6 +766,7 @@ public class TestFlatStyleableInfo
 			"oneTouchArrowColor", Color.class,
 			"oneTouchHoverArrowColor", Color.class,
 			"oneTouchPressedArrowColor", Color.class,
+			"oneTouchButtonsPlacement", String.class,
 
 			"style", String.class,
 			"gripColor", Color.class,

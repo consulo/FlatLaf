@@ -44,6 +44,7 @@ import java.util.regex.Pattern;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
+import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileSystemView;
@@ -92,7 +93,8 @@ import com.formdev.flatlaf.ui.FlatNativeWindowsLibrary;
  *   <li><b>Save File</b> dialog does not support multi-selection.
  *   <li>For selection mode {@link #DIRECTORIES_ONLY}, dialog type {@link #SAVE_DIALOG} is ignored.
  *       Operating system file dialogs support folder selection only in "Open" dialogs.
- *   <li>{@link JFileChooser#FILES_AND_DIRECTORIES} is not supported.
+ *   <li>{@link #FILES_AND_DIRECTORIES} is only supported in <b>Open</b> dialogs on <b>macOS</b>.
+ *       On Windows and Linux (and in macOS <b>Save</b> dialogs), it behaves like {@link #FILES_ONLY}.
  *   <li>{@link #getSelectedFiles()} returns selected file also in single selection mode.
  *       {@link JFileChooser#getSelectedFiles()} only in multi selection mode.
  *   <li>Only file name extension filters (see {@link FileNameExtensionFilter}) are supported on all platforms.
@@ -108,6 +110,16 @@ import com.formdev.flatlaf.ui.FlatNativeWindowsLibrary;
  *   <li><b>macOS</b>: By default, the user can not navigate into file packages (e.g. applications).
  *       If needed, this can be enabled by setting platform property
  *       {@link #MAC_TREATS_FILE_PACKAGES_AS_DIRECTORIES} to {@code true}.
+ *   <li><b>macOS</b>: The file dialog (buttons, warnings, etc.) is shown in English,
+ *       even if the macOS system language is different,
+ *       unless the application bundle declares the supported languages
+ *       in key {@code CFBundleLocalizations} of its {@code Info.plist}
+ *       (e.g. {@code <array><string>en</string><string>de</string></array>}).
+ *       {@code CFBundleAllowMixedLocalizations} (used by jpackage) is not sufficient.
+ *       When running an application with the {@code java} command (not bundled),
+ *       the file dialog is always in English.
+ *       This is a macOS limitation. There is no API to change the language of file dialogs.
+ *       (issue #1121)
  *   <li>If no "current directory" is specified, then {@code JFileChooser} always opens
  *       the users "Documents" folder (on Windows) or "Home" folder (on macOS and Linux).<br>
  *       {@code SystemFileChooser} does the same when first shown, but then remembers
@@ -137,6 +149,16 @@ public class SystemFileChooser
 
 	/** @see JFileChooser#DIRECTORIES_ONLY */
 	public static final int DIRECTORIES_ONLY = JFileChooser.DIRECTORIES_ONLY;
+
+	/**
+	 * Allows selecting files and directories.
+	 * Only supported in <b>Open</b> dialogs on <b>macOS</b>.
+	 * On other platforms (and in macOS <b>Save</b> dialogs), behaves like {@link #FILES_ONLY}.
+	 *
+	 * @see JFileChooser#FILES_AND_DIRECTORIES
+	 * @since 3.8
+	 */
+	public static final int FILES_AND_DIRECTORIES = JFileChooser.FILES_AND_DIRECTORIES;
 
 	private int dialogType = OPEN_DIALOG;
 	private String dialogTitle;
@@ -385,7 +407,8 @@ public class SystemFileChooser
 
 	/**
 	 * Returns file-selection mode.
-	 * Possible values are {@link #FILES_ONLY} and {@link #DIRECTORIES_ONLY}.
+	 * Possible values are {@link #FILES_ONLY}, {@link #DIRECTORIES_ONLY}
+	 * and {@link #FILES_AND_DIRECTORIES} (macOS only; see there).
 	 * Default is {@link #FILES_ONLY}.
 	 *
 	 * @see JFileChooser#getFileSelectionMode()
@@ -396,12 +419,14 @@ public class SystemFileChooser
 
 	/**
 	 * Sets file-selection mode.
-	 * Possible values are {@link #FILES_ONLY} and {@link #DIRECTORIES_ONLY}.
+	 * Possible values are {@link #FILES_ONLY}, {@link #DIRECTORIES_ONLY}
+	 * and {@link #FILES_AND_DIRECTORIES} (macOS only; see there).
 	 *
 	 * @see JFileChooser#setFileSelectionMode(int)
 	 */
 	public void setFileSelectionMode( int fileSelectionMode ) {
-		if( fileSelectionMode != FILES_ONLY && fileSelectionMode != DIRECTORIES_ONLY )
+		if( fileSelectionMode != FILES_ONLY && fileSelectionMode != DIRECTORIES_ONLY &&
+			fileSelectionMode != FILES_AND_DIRECTORIES )
 			throw new IllegalArgumentException( "Invalid file selection mode " + fileSelectionMode );
 
 		this.fileSelectionMode = fileSelectionMode;
@@ -409,11 +434,16 @@ public class SystemFileChooser
 
 	/** @see JFileChooser#isFileSelectionEnabled() */
 	public boolean isFileSelectionEnabled() {
-		return fileSelectionMode == FILES_ONLY;
+		return fileSelectionMode == FILES_ONLY || fileSelectionMode == FILES_AND_DIRECTORIES;
 	}
 
 	/** @see JFileChooser#isDirectorySelectionEnabled() */
 	public boolean isDirectorySelectionEnabled() {
+		return fileSelectionMode == DIRECTORIES_ONLY || fileSelectionMode == FILES_AND_DIRECTORIES;
+	}
+
+	/** Returns whether only directories can be selected (mode {@link #DIRECTORIES_ONLY}). */
+	private boolean isDirectoriesOnly() {
 		return fileSelectionMode == DIRECTORIES_ONLY;
 	}
 
@@ -826,6 +856,13 @@ public class SystemFileChooser
 					try {
 						filenamesRef.set( showSystemDialog( owner, fc ) );
 					} finally {
+						// stop blocking input events as soon as the system file dialog is closed;
+						// if a modal dialog was shown while the file dialog was open
+						// (e.g. from a drop handler when dragging a file from the file dialog
+						// into the application), secondaryLoop.enter() does not return before
+						// that modal dialog is closed, and the modal dialog must be usable
+						if( queue != null )
+							queue.stopBlocking();
 						secondaryLoop.exit();
 					}
 				}, "FlatLaf SystemFileChooser" ).start();
@@ -856,6 +893,13 @@ public class SystemFileChooser
 		}
 
 		abstract String[] showSystemDialog( Window owner, SystemFileChooser fc );
+
+		int getLafDark() {
+			LookAndFeel laf = UIManager.getLookAndFeel();
+			return (laf instanceof FlatLaf)
+				? (((FlatLaf)laf).isDark() ? 1 : 0)
+				: -1;
+		}
 
 		boolean invokeApproveCallback( SystemFileChooser fc, String[] files, ApproveContext context ) {
 			if( files == null || files.length == 0 )
@@ -906,6 +950,9 @@ public class SystemFileChooser
 		{
 			private static boolean problemLogged;
 
+			private volatile boolean blocking = true;
+			private int dropDispatchDepth; // only accessed on EDT
+
 			static InputBlockingEventQueue install() {
 				InputBlockingEventQueue queue = new InputBlockingEventQueue();
 
@@ -940,8 +987,38 @@ public class SystemFileChooser
 				super.pop();
 			}
 
+			void stopBlocking() {
+				blocking = false;
+			}
+
 			@Override
 			protected void dispatchEvent( AWTEvent event ) {
+				// Never block drag-and-drop events (class sun.awt.dnd.SunDropTargetEvent,
+				// which extends MouseEvent and uses mouse event IDs).
+				// The toolkit thread (e.g. AppKit thread on macOS) waits until those events
+				// are dispatched, and blocking them would hang the application
+				// (e.g. when dragging a file from the system file dialog into an application window).
+				//
+				// Also do not block any events while the application handles a drop.
+				// The drop handler may show a modal dialog (e.g. asking how to add dropped files).
+				// On macOS, the system file dialog can not return before the drop is completed
+				// (the AppKit thread waits for it), so the modal dialog must stay usable,
+				// even after the file dialog was closed.
+				if( isDropTargetEvent( event ) ) {
+					dropDispatchDepth++;
+					try {
+						super.dispatchEvent( event );
+					} finally {
+						dropDispatchDepth--;
+					}
+					return;
+				}
+
+				if( !blocking || dropDispatchDepth > 0 ) {
+					super.dispatchEvent( event );
+					return;
+				}
+
 				int eventID = event.getID();
 				if( (eventID >= MouseEvent.MOUSE_FIRST && eventID <= MouseEvent.MOUSE_LAST) ||
 					(eventID >= KeyEvent.KEY_FIRST && eventID <= KeyEvent.KEY_LAST) ||
@@ -952,6 +1029,14 @@ public class SystemFileChooser
 				}
 
 				super.dispatchEvent( event );
+			}
+
+			private static boolean isDropTargetEvent( AWTEvent event ) {
+				for( Class<?> cls = event.getClass(); cls != null && cls != MouseEvent.class; cls = cls.getSuperclass() ) {
+					if( cls.getName().equals( "sun.awt.dnd.SunDropTargetEvent" ) )
+						return true;
+				}
+				return false;
 			}
 		}
 	}
@@ -1007,7 +1092,7 @@ public class SystemFileChooser
 			int optionsClear = fc.getPlatformOptions( WINDOWS_OPTIONS_CLEAR, optionsBlocked );
 			if( (optionsClear & FlatNativeWindowsLibrary.FOS_OVERWRITEPROMPT) == 0 )
 				optionsSet |= FlatNativeWindowsLibrary.FOS_OVERWRITEPROMPT;
-			if( fc.isDirectorySelectionEnabled() )
+			if( fc.isDirectoriesOnly() ) // FILES_AND_DIRECTORIES is mapped to FILES_ONLY
 				optionsSet |= FlatNativeWindowsLibrary.FOS_PICKFOLDERS;
 			if( fc.isMultiSelectionEnabled() )
 				optionsSet |= FlatNativeWindowsLibrary.FOS_ALLOWMULTISELECT;
@@ -1018,7 +1103,7 @@ public class SystemFileChooser
 			int fileTypeIndex = 0;
 			ArrayList<String> fileTypes = new ArrayList<>();
 			ArrayList<FileFilter> fileTypeFilters = new ArrayList<>();
-			if( !fc.isDirectorySelectionEnabled() ) {
+			if( !fc.isDirectoriesOnly() ) {
 				List<FileFilter> filters = fc.getFiltersForDialog();
 				if( !filters.isEmpty() ) {
 					fileTypeIndex = filters.indexOf( fc.getFileFilter() );
@@ -1089,7 +1174,7 @@ public class SystemFileChooser
 				if( secondaryText != null )
 					primaryText = primaryText + "\n\n" + secondaryText;
 
-				// button menmonics ("&" -> "&&", "__" -> "_", "_" -> "&")
+				// button mnemonics ("&" -> "&&", "__" -> "_", "_" -> "&")
 				for( int i = 0; i < buttons.length; i++ )
 					buttons[i] = buttons[i].replace( "&", "&&" ).replace( "__", "\u0001" ).replace( '_', '&' ).replace( '\u0001', '_' );
 
@@ -1130,7 +1215,7 @@ public class SystemFileChooser
 
 		@Override
 		String[] showSystemDialog( Window owner, SystemFileChooser fc ) {
-			int dark = FlatLaf.isLafDark() ? 1 : 0;
+			int dark = getLafDark();
 			boolean open = (fc.getDialogType() == OPEN_DIALOG);
 			String nameFieldStringValue = null;
 			String directoryURL = null;
@@ -1157,10 +1242,14 @@ public class SystemFileChooser
 			int optionsClear = fc.getPlatformOptions( MAC_OPTIONS_CLEAR, optionsBlocked );
 			if( (optionsClear & FlatNativeMacLibrary.FC_accessoryViewDisclosed) == 0 )
 				optionsSet |= FlatNativeMacLibrary.FC_accessoryViewDisclosed;
-			if( fc.isDirectorySelectionEnabled() ) {
+			if( fc.isDirectoriesOnly() ) {
 				optionsSet |= FlatNativeMacLibrary.FC_canChooseDirectories | FlatNativeMacLibrary.FC_canCreateDirectories;
 				optionsClear |= FlatNativeMacLibrary.FC_canChooseFiles;
 				open = true;
+			} else if( fc.getFileSelectionMode() == FILES_AND_DIRECTORIES && open ) {
+				// NSOpenPanel supports choosing files and directories at the same time
+				// (NSSavePanel does not; there it behaves like FILES_ONLY)
+				optionsSet |= FlatNativeMacLibrary.FC_canChooseFiles | FlatNativeMacLibrary.FC_canChooseDirectories;
 			}
 			if( fc.isMultiSelectionEnabled() )
 				optionsSet |= FlatNativeMacLibrary.FC_allowsMultipleSelection;
@@ -1173,7 +1262,7 @@ public class SystemFileChooser
 			int fileTypeIndex = 0;
 			ArrayList<String> fileTypes = new ArrayList<>();
 			ArrayList<FileFilter> fileTypeFilters = new ArrayList<>();
-			if( !fc.isDirectorySelectionEnabled() ) {
+			if( !fc.isDirectoriesOnly() ) {
 				List<FileFilter> filters = fc.getFiltersForDialog();
 				if( !filters.isEmpty() ) {
 					fileTypeIndex = filters.indexOf( fc.getFileFilter() );
@@ -1230,7 +1319,7 @@ public class SystemFileChooser
 			public int showMessageDialog( int messageType, String primaryText,
 				String secondaryText, int defaultButton, String... buttons )
 			{
-				// remove button menmonics ("__" -> "_", "_" -> "")
+				// remove button mnemonics ("__" -> "_", "_" -> "")
 				for( int i = 0; i < buttons.length; i++ )
 					buttons[i] = buttons[i].replace( "__", "\u0001" ).replace( "_", "" ).replace( "\u0001", "_" );
 
@@ -1256,7 +1345,7 @@ public class SystemFileChooser
 
 		@Override
 		String[] showSystemDialog( Window owner, SystemFileChooser fc ) {
-			int dark = FlatLaf.isLafDark() ? 1 : 0;
+			int dark = getLafDark();
 			boolean open = (fc.getDialogType() == OPEN_DIALOG);
 			String approveButtonText = fc.getApproveButtonText();
 			int approveButtonMnemonic = fc.getApproveButtonMnemonic();
@@ -1296,7 +1385,7 @@ public class SystemFileChooser
 			int optionsClear = fc.getPlatformOptions( LINUX_OPTIONS_CLEAR, optionsBlocked );
 			if( (optionsClear & FlatNativeLinuxLibrary.FC_do_overwrite_confirmation) == 0 )
 				optionsSet |= FlatNativeLinuxLibrary.FC_do_overwrite_confirmation;
-			if( fc.isDirectorySelectionEnabled() )
+			if( fc.isDirectoriesOnly() ) // FILES_AND_DIRECTORIES is mapped to FILES_ONLY
 				optionsSet |= FlatNativeLinuxLibrary.FC_select_folder;
 			if( fc.isMultiSelectionEnabled() )
 				optionsSet |= FlatNativeLinuxLibrary.FC_select_multiple;
@@ -1309,7 +1398,7 @@ public class SystemFileChooser
 			int fileTypeIndex = 0;
 			ArrayList<String> fileTypes = new ArrayList<>();
 			ArrayList<FileFilter> fileTypeFilters = new ArrayList<>();
-			if( !fc.isDirectorySelectionEnabled() ) {
+			if( !fc.isDirectoriesOnly() ) {
 				List<FileFilter> filters = fc.getFiltersForDialog();
 				if( !filters.isEmpty() ) {
 					fileTypeIndex = filters.indexOf( fc.getFileFilter() );
@@ -1470,7 +1559,11 @@ public class SystemFileChooser
 			chooser.setDialogTitle( fc.getDialogTitle() );
 			chooser.setApproveButtonText( fc.getApproveButtonText() );
 			chooser.setApproveButtonMnemonic( fc.getApproveButtonMnemonic() );
-			chooser.setFileSelectionMode( fc.getFileSelectionMode() );
+			int fileSelectionMode = fc.getFileSelectionMode();
+			if( fileSelectionMode == FILES_AND_DIRECTORIES &&
+				(!SystemInfo.isMacOS || fc.getDialogType() != OPEN_DIALOG) )
+			  fileSelectionMode = FILES_ONLY;
+			chooser.setFileSelectionMode( fileSelectionMode );
 			chooser.setMultiSelectionEnabled( fc.isMultiSelectionEnabled() );
 			chooser.setFileHidingEnabled( fc.isFileHidingEnabled() );
 			chooser.setAcceptAllFileFilterUsed( fc.isAcceptAllFileFilterUsed() );
@@ -1482,7 +1575,7 @@ public class SystemFileChooser
 			  chooser.setMultiSelectionEnabled( false );
 
 			// filter
-			if( !fc.isDirectorySelectionEnabled() ) {
+			if( !fc.isDirectoriesOnly() ) {
 				List<FileFilter> filters = fc.getFiltersForDialog();
 				if( !filters.isEmpty() ) {
 					FileFilter currentFilter = fc.getFileFilter();
@@ -1625,7 +1718,7 @@ public class SystemFileChooser
 				if( secondaryText != null )
 					primaryText = primaryText + "\n\n" + secondaryText;
 
-				// remove button menmonics ("__" -> "_", "_" -> "")
+				// remove button mnemonics ("__" -> "_", "_" -> "")
 				for( int i = 0; i < buttons.length; i++ )
 					buttons[i] = buttons[i].replace( "__", "\u0001" ).replace( "_", "" ).replace( "\u0001", "_" );
 

@@ -8,9 +8,47 @@ FlatLaf Change Log
 - Added support for [Oklab](https://bottosson.github.io/posts/oklab/) and linear sRGB
   color spaces to color functions `mix()`, `tint()` and `shade()`. (PR #1132, issue #1109)
 - Theme Editor: Added preview for color functions. (see PR #1132)
+- macOS: Add support for `Cmd+Backspace` and `Cmd+Delete` shortcuts to text
+  components. (PR #1142, issue #1095)
+- Publish Maven/Gradle BOM (Bill of Materials) to Maven Central. Artifact ID
+  is `flatlaf-bom`. (issue #1146)
+- Menus: On Windows, when a screen reader (e.g. NVDA) is running, activating the
+  menu bar with `Alt` or `F10` keys now also shows the popup of the first menu.
+  Otherwise, the screen reader would not announce the menu bar. (issue #1093)
+- Slider: Added UI values `Slider.trackArc` and `Slider.thumbArc` to customize
+  track and thumb corner diameter. (issue #1041)
+- SplitPane: Support placing one-touch buttons in the center or at the end of
+  the divider via UI property `SplitPaneDivider.oneTouchButtonsPlacement`
+  (`leading`, `center` or `trailing`). (issue #1116)
+- Tree: Use selection foreground color for expanded, collapsed, leaf, closed and
+  open icons of selected rows (if wide selection is enabled). (issue #925)
+- System File Chooser: Support selection mode `FILES_AND_DIRECTORIES` on macOS
+  (in Open dialogs). On other platforms, it behaves like `FILES_ONLY`. (PR
+  #1157)
+- Extras: UI Inspector: Added `FlatInspector.addInfoProvider()` to allow
+  applications to add custom rows to the UI inspector tooltip. (issue #1123)
+- Added `FlatMatteBorder`, which is similar to `MatteBorder` but supports HiDPI
+  scaling/painting. (issue #1114)
+- Borders in UI defaults and styles: Added border functions
+  `empty(top,left,bottom,right)`,
+  `line([top,left,bottom,right,][lineColor[,lineThickness[,arc]]])` and
+  `matte(top,left,bottom,right,matteColor)`. Multiple functions separated by
+  commas build a compound border (first function is outermost border), e.g.
+  `line(#f00), empty(4,8,4,8)`. Border class names with constructor parameters
+  (e.g. `com.myapp.MyBorder(1,0,0,0,#f00)`) now also works. (issue #1114)
 
 #### Fixed bugs
 
+- System File Chooser:
+  - Linux: Fixed deadlock when invoking `java.awt.Desktop` methods `open()`,
+    `browse()` or `mail()` after a `SystemFileChooser` was shown at some point
+    prior. (issue #1158)
+  - Fixed application hang when dragging files from the system file dialog into
+    an application window (on macOS). Also fixed unusable modal dialogs shown
+    from a drop handler while the system file dialog is open. (PR #1156)
+  - On macOS and Linux, do not request light/dark appearance for system file
+    dialog if current L&F is not FlatLaf (e.g. Aqua). (issue #1162)
+- ColorChooser: Do not use rounded border for color palette boxes. (issue #1150)
 - FileChooser:
   - Fixed selection painting in "Details" view when theme uses rounded
     selection. (issue #1137)
@@ -18,8 +56,27 @@ FlatLaf Change Log
 - ScrollPane: When using rounded border and scrollpane width was near view
   width, then the horizontal scrollbar was shown even when it was not necessary.
   (issue #1135)
+- Spinner: For button style `mac` (used in macOS themes), it is now possible to
+  use rounded corners by setting UI property `TextComponent.arc` or styling
+  (e.g. `arc: 4`). (issue #1151)
+- TabbedPane: Titles of disabled tabs were not grayed out if title contains
+  HTML. (issue #1143)
+- Table: Fixed gaps (in table background color) between cells and grid lines
+  when grid lines are shown and intercell spacing is 1 or 2, on Windows with
+  scale factors 125%, 150%, 175%, etc. (issue #581)
 - Make sure that `META-INF/MANIFEST.MF` is first jar entry, so that tools that
   use `JarInputStream` readers see `Multi-Release: true`. (issue #1139)
+- Windows 11: Fixed missing popup borders in VMs without 3D acceleration and in
+  remote sessions. (issues #968 and #1101)
+- macOS 27: Screen menu bar (`apple.laf.useScreenMenuBar=true`) showed only the
+  Apple menu and the application menu, but no Java menus, until hovering the
+  menu bar or switching to another application and back. This is a macOS issue,
+  which also occurs without FlatLaf, when the menu bar is installed a bit "late"
+  after application launch. FlatLaf now forces a redraw of the screen menu bar
+  (requires FlatLaf native library). (PR #1154, issue #1153)
+- Native libraries: Fixed `IllegalArgumentException: URI has an authority component`
+  trying to load native library when running application from a Windows network drive.
+  (issue #1145)
 - Extras:
   - `FlatSVGIcon`: Fixed wrong color when SVG uses `fill="currentColor"`. (issue #1144)
 
@@ -2128,7 +2185,7 @@ FlatLaf Change Log
     non-opaque.
 - TextField, FormattedTextField and PasswordField: Select all text when a text
   field gains focus for the first time and selection was not set explicitly.
-  This can be configured to newer or always select all text on focus gain (see
+  This can be configured to never or always select all text on focus gain (see
   UI default value `TextComponent.selectAllOnFocusPolicy`).
 - ProgressBar: Made progress bar paint smooth in indeterminate mode.
 
