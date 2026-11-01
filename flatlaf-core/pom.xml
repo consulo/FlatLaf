@@ -138,6 +138,8 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
+					<!-- the tests use java.logging, which the module does not read -->
+					<useModulePath>false</useModulePath>
 					<argLine>--add-opens java.desktop/javax.swing.plaf.basic=ALL-UNNAMED</argLine>
 				</configuration>
 			</plugin>
